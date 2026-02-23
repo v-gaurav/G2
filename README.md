@@ -6,6 +6,11 @@
   My personal Claude assistant that runs securely in containers. Inspired by <a href="https://github.com/qwibitai/nanoclaw">NanoClaw</a>, rebuilt as my own.
 </p>
 
+<p align="center">
+  <a href="https://github.com/v-gaurav/g2/tree/main/repo-tokens"><img src="https://raw.githubusercontent.com/v-gaurav/G2/main/repo-tokens/badge.svg" alt="repo tokens"></a>
+  <!-- token-count --><!-- /token-count -->
+</p>
+
 ## Why G2
 
 G2 is my personal fork of [NanoClaw](https://github.com/qwibitai/nanoclaw). Same philosophy — a personal Claude assistant you can actually understand — but tailored to my exact needs.
