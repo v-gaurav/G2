@@ -99,19 +99,48 @@ g2/
 │
 ├── src/
 │   ├── index.ts                   # Orchestrator: state, message loop, agent invocation
-│   ├── channels/
-│   │   └── whatsapp.ts            # WhatsApp connection, auth, send/receive
-│   ├── ipc.ts                     # IPC watcher and task processing
-│   ├── router.ts                  # Message formatting and outbound routing
+│   ├── types.ts                   # TypeScript interfaces (Channel, RegisteredGroup, NewMessage, etc.)
 │   ├── config.ts                  # Configuration constants
-│   ├── types.ts                   # TypeScript interfaces (includes Channel)
 │   ├── logger.ts                  # Pino logger setup
 │   ├── db.ts                      # SQLite database initialization and queries
+│   ├── env.ts                     # Secure .env file parsing
+│   ├── channels/
+│   │   ├── whatsapp.ts            # WhatsApp connection, auth, send/receive
+│   │   ├── whatsapp-metadata-sync.ts  # WhatsApp group metadata syncing
+│   │   └── outgoing-message-queue.ts  # Rate-limited outbound message queue
+│   ├── channel-registry.ts        # Registry pattern for multiple channels
+│   ├── router.ts                  # Message formatting and outbound routing
+│   ├── container-runner.ts        # Spawns agents in containers
+│   ├── container-runtime.ts       # Docker runtime abstraction
 │   ├── group-queue.ts             # Per-group queue with global concurrency limit
-│   ├── mount-security.ts          # Mount allowlist validation for containers
-│   ├── whatsapp-auth.ts           # Standalone WhatsApp authentication
 │   ├── task-scheduler.ts          # Runs scheduled tasks when due
-│   └── container-runner.ts        # Spawns agents in containers
+│   ├── session-manager.ts         # Claude Agent SDK session management per group
+│   ├── ipc.ts                     # IPC watcher and task processing
+│   ├── ipc-handlers/              # Modular IPC command handlers
+│   │   ├── index.ts               # Exports all handlers
+│   │   ├── dispatcher.ts          # Routes IPC commands to handlers
+│   │   ├── types.ts               # IpcCommandHandler interface
+│   │   ├── schedule-task.ts       # Handle schedule_task command
+│   │   ├── register-group.ts      # Handle register_group command
+│   │   ├── pause-task.ts          # Handle pause_task command
+│   │   ├── resume-task.ts         # Handle resume_task command
+│   │   ├── cancel-task.ts         # Handle cancel_task command
+│   │   ├── clear-session.ts       # Handle clear_session command
+│   │   ├── resume-session.ts      # Handle resume_session command
+│   │   └── refresh-groups.ts      # Handle refresh_groups command
+│   ├── interfaces/                # Composable abstraction layer
+│   │   ├── index.ts               # Exports all interfaces
+│   │   ├── container-runtime.ts   # IContainerRuntime interface
+│   │   ├── docker-runtime.ts      # Docker implementation of IContainerRuntime
+│   │   ├── mount-factory.ts       # IMountFactory interface
+│   │   ├── default-mount-factory.ts  # Default mount builder (group/main-aware)
+│   │   ├── message-store.ts       # IMessageStore interface
+│   │   └── sqlite-message-store.ts   # SQLite implementation of IMessageStore
+│   ├── authorization.ts           # Fine-grained IPC auth (canSendMessage, canScheduleTask, etc.)
+│   ├── mount-security.ts          # Mount allowlist validation for containers
+│   ├── trigger-validator.ts       # Trigger pattern matching for non-main groups
+│   ├── timeout-config.ts          # Container timeout configuration
+│   └── whatsapp-auth.ts           # Standalone WhatsApp authentication
 │
 ├── container/
 │   ├── Dockerfile                 # Container image (runs as 'node' user, includes Claude Code CLI)
@@ -123,7 +152,8 @@ g2/
 │   │       ├── index.ts           # Entry point (query loop, IPC polling, session resume)
 │   │       └── ipc-mcp-stdio.ts   # Stdio-based MCP server for host communication
 │   └── skills/
-│       └── agent-browser.md       # Browser automation skill
+│       └── agent-browser/
+│           └── SKILL.md           # Browser automation skill
 │
 ├── dist/                          # Compiled JavaScript (gitignored)
 │

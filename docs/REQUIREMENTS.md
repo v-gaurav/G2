@@ -16,7 +16,7 @@ G2 gives you the core functionality without that mess.
 
 ### Small Enough to Understand
 
-The entire codebase should be something you can read and understand. One Node.js process. A handful of source files. No microservices, no message queues, no abstraction layers.
+The entire codebase should be something you can read and understand. One Node.js process. Composable modules with clean interfaces. No microservices, no message queues.
 
 ### Security Through True Isolation
 
@@ -79,17 +79,29 @@ A personal Claude assistant accessible via WhatsApp, with minimal custom code.
 
 **Implementation approach:**
 - Use existing tools (WhatsApp connector, Claude Agent SDK, MCP servers)
-- Minimal glue code
+- Composable, interface-driven modules with dependency injection for testability
 - File-based systems where possible (CLAUDE.md for memory, folders for groups)
 
 ---
 
 ## Architecture Decisions
 
+### Design Patterns
+
+The codebase uses composable, interface-driven design:
+
+- **Interface abstractions** — Core behaviors are defined as interfaces (`IContainerRuntime`, `IMountFactory`, `IMessageStore`), decoupling consumers from implementations. Swapping Docker for Apple Container means providing a different `IContainerRuntime`.
+- **Dependency injection** — Modules accept their dependencies as constructor/function parameters with sensible defaults. `container-runner` accepts optional `runtime` and `mountFactory`, making it testable with mocks and swappable at runtime.
+- **Registry pattern** — `ChannelRegistry` manages multiple communication channels. Channels implement the `Channel` interface and register themselves; the orchestrator routes messages by asking the registry which channel owns a given JID.
+- **Command dispatcher** — IPC commands from containers are handled by an `IpcCommandDispatcher` that routes to modular `IpcCommandHandler` implementations (one per command type: `schedule-task`, `register-group`, `pause-task`, etc.). Adding a new IPC command means adding one handler file.
+- **Manager classes** — `SessionManager` encapsulates Claude Agent SDK session state with an in-memory cache backed by SQLite persistence.
+- **Authorization as pure functions** — `authorization.ts` exports stateless guard functions (`canSendMessage`, `canScheduleTask`, `canRegisterGroup`, etc.) that take an `AuthContext` and return a boolean. No side effects, trivially testable.
+- **Single responsibility modules** — Each concern has its own module: trigger validation (`trigger-validator`), mount security (`mount-security`), timeout configuration (`timeout-config`), secure env parsing (`env`), outbound message rate limiting (`outgoing-message-queue`).
+
 ### Message Routing
-- A router listens to WhatsApp and routes messages based on configuration
+- Channels implement the `Channel` interface and register with `ChannelRegistry`
 - Only messages from registered groups are processed
-- Trigger: `@G2` prefix (case insensitive), configurable via `ASSISTANT_NAME` env var
+- Trigger matching is handled by `trigger-validator` — `@G2` prefix (case insensitive), configurable via `ASSISTANT_NAME` env var
 - Unregistered groups are ignored completely
 
 ### Memory System
@@ -100,24 +112,27 @@ A personal Claude assistant accessible via WhatsApp, with minimal custom code.
 
 ### Session Management
 - Each group maintains a conversation session (via Claude Agent SDK)
+- `SessionManager` provides an in-memory cache with SQLite persistence, plus archive/restore for session history
 - Sessions auto-compact when context gets too long, preserving critical information
 
 ### Container Isolation
 - All agents run inside containers (lightweight Linux VMs)
-- Each agent invocation spawns a container with mounted directories
+- Container runtime is abstracted behind `IContainerRuntime`; Docker is the default, Apple Container available via `/convert-to-apple-container`
+- Mount construction is abstracted behind `IMountFactory`; `DefaultMountFactory` builds mounts based on group identity and main/non-main status
+- Mount security is enforced by `mount-security` with an external allowlist at `~/.config/g2/mount-allowlist.json`
 - Containers provide filesystem isolation - agents can only see mounted paths
 - Bash access is safe because commands run inside the container, not on the host
 - Browser automation via agent-browser with Chromium in the container
 
-### Scheduled Tasks
+### IPC & Scheduled Tasks
+- IPC commands from containers are dispatched by `IpcCommandDispatcher` to modular handlers
 - Users can ask Claude to schedule recurring or one-time tasks from any group
 - Tasks run as full agents in the context of the group that created them
 - Tasks have access to all tools including Bash (safe in container)
 - Tasks can optionally send messages to their group via `send_message` tool, or complete silently
 - Task runs are logged to the database with duration and result
 - Schedule types: cron expressions, intervals (ms), or one-time (ISO timestamp)
-- From main: can schedule tasks for any group, view/manage all tasks
-- From other groups: can only manage that group's tasks
+- Authorization is enforced per-operation: main can schedule/manage tasks for any group; non-main groups can only manage their own
 
 ### Group Management
 - New groups are added explicitly via the main channel
@@ -125,12 +140,11 @@ A personal Claude assistant accessible via WhatsApp, with minimal custom code.
 - Each group gets a dedicated folder under `groups/`
 - Groups can have additional directories mounted via `containerConfig`
 
-### Main Channel Privileges
-- Main channel is the admin/control group (typically self-chat)
-- Can write to global memory (`groups/CLAUDE.md`)
-- Can schedule tasks for any group
-- Can view and manage tasks from all groups
-- Can configure additional directory mounts for any group
+### Authorization
+- Fine-grained, per-operation authorization via pure functions in `authorization.ts`
+- Each IPC operation checks auth before executing: `canSendMessage`, `canScheduleTask`, `canManageTask`, `canRegisterGroup`, `canRefreshGroups`, `canManageSession`
+- Main channel is the admin/control group (typically self-chat) — has full privileges
+- Non-main groups are restricted to their own resources
 
 ---
 

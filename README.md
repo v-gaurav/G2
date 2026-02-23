@@ -10,7 +10,7 @@
 
 G2 is my personal fork of [NanoClaw](https://github.com/qwibitai/nanoclaw). Same philosophy — a personal Claude assistant you can actually understand — but tailored to my exact needs.
 
-One process. A handful of files. Agents run in actual Linux containers with filesystem isolation, not behind permission checks.
+One process. Composable modules with clean interfaces. Agents run in actual Linux containers with filesystem isolation, not behind permission checks.
 
 ## Quick Start
 
@@ -24,7 +24,7 @@ Then run `/setup`. Claude Code handles everything: dependencies, authentication,
 
 ## Philosophy
 
-**Small enough to understand.** One process, a few source files. No microservices, no message queues, no abstraction layers. Have Claude Code walk you through it.
+**Small enough to understand.** One process, composable modules with clean interfaces. No microservices, no message queues. Have Claude Code walk you through it.
 
 **Secure by isolation.** Agents run in Linux containers (Apple Container on macOS, or Docker). They can only see what's explicitly mounted. Bash access is safe because commands run inside the container, not on your host.
 
@@ -135,12 +135,18 @@ Single Node.js process. Agents execute in isolated Linux containers with mounted
 Key files:
 - `src/index.ts` - Orchestrator: state, message loop, agent invocation
 - `src/channels/whatsapp.ts` - WhatsApp connection, auth, send/receive
-- `src/ipc.ts` - IPC watcher and task processing
-- `src/router.ts` - Message formatting and outbound routing
-- `src/group-queue.ts` - Per-group queue with global concurrency limit
+- `src/channel-registry.ts` - Registry pattern for multiple channels
 - `src/container-runner.ts` - Spawns streaming agent containers
+- `src/container-runtime.ts` - Docker runtime abstraction
+- `src/interfaces/` - Composable interfaces (`IContainerRuntime`, `IMountFactory`, `IMessageStore`)
+- `src/ipc.ts` - IPC watcher; `src/ipc-handlers/` - Modular IPC command handlers
+- `src/group-queue.ts` - Per-group queue with global concurrency limit
 - `src/task-scheduler.ts` - Runs scheduled tasks
+- `src/session-manager.ts` - Claude Agent SDK session management
+- `src/authorization.ts` - Fine-grained IPC auth
+- `src/mount-security.ts` - Mount allowlist validation
 - `src/db.ts` - SQLite operations (messages, groups, sessions, state)
+- `src/router.ts` - Message formatting and outbound routing
 - `groups/*/CLAUDE.md` - Per-group memory
 
 ## FAQ
