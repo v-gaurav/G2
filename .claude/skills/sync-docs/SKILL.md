@@ -154,7 +154,7 @@ If any broken refs remain, fix them.
 - Does not update `groups/*/CLAUDE.md` (those are per-group agent memory, not project docs)
 - Does not update `docs/SDK_DEEP_DIVE.md` (SDK reference, not codebase structure)
 - Does not update `docs/APPLE-CONTAINER-NETWORKING.md` (networking guide, not codebase structure)
-- Does not update `docs/g2-architecture-final.md` or `docs/g2-nanorepo-architecture.md` (skills system architecture, not source structure)
+- Does not update `docs/g2-skills-architecture.md` (skills system architecture, not source structure)
 - Does not modify source code — only documentation files
 
 **Note:** `docs/ARCHITECTURE.md` IS in scope — it documents the runtime system architecture and must stay in sync with the source code.
