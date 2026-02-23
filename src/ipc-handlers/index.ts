@@ -1,4 +1,4 @@
-export { IpcCommandHandler } from './types.js';
+export type { IpcCommandHandler } from './types.js';
 export { IpcCommandDispatcher } from './dispatcher.js';
 export { ScheduleTaskHandler } from './schedule-task.js';
 export { PauseTaskHandler } from './pause-task.js';
