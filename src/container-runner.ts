@@ -503,7 +503,7 @@ export function writeTasksSnapshot(
 
 export function writeSessionHistorySnapshot(
   groupFolder: string,
-  sessions: Array<{ id: number; name: string; created_at: string; archived_at: string }>,
+  sessions: Array<{ id: number; name: string; session_id: string; archived_at: string }>,
 ): void {
   const groupIpcDir = path.join(DATA_DIR, 'ipc', groupFolder);
   fs.mkdirSync(groupIpcDir, { recursive: true });

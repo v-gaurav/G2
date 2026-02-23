@@ -340,7 +340,7 @@ server.tool(
   'resume_session',
   'Resume a past saved conversation. The current container will exit after this call — send any final message to the user BEFORE calling this tool.',
   {
-    session_id: z.number().describe('The session history ID from list_sessions'),
+    session_id: z.number().describe('The archive ID from list_sessions'),
     save_current_as: z.string().optional().describe('If provided, saves the current conversation with this name before switching'),
   },
   async (args) => {
@@ -355,6 +355,51 @@ server.tool(
     return {
       content: [{ type: 'text' as const, text: `Resuming session ${args.session_id}. Container will exit — next message continues that conversation.` }],
     };
+  },
+);
+
+async function waitForResponse(filePath: string, timeoutMs: number): Promise<any | null> {
+  const pollMs = 200;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (fs.existsSync(filePath)) {
+      const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+      try { fs.unlinkSync(filePath); } catch { /* ignore */ }
+      return data;
+    }
+    await new Promise(r => setTimeout(r, pollMs));
+  }
+  return null;
+}
+
+server.tool(
+  'search_sessions',
+  'Search past conversations by keyword. Returns matching archived sessions.',
+  {
+    query: z.string().describe('Keyword(s) to search for in past conversations'),
+  },
+  async (args) => {
+    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    writeIpcFile(TASKS_DIR, {
+      type: 'search_sessions',
+      query: args.query,
+      requestId,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    });
+
+    const responsePath = path.join(IPC_DIR, 'responses', `${requestId}.json`);
+    const result = await waitForResponse(responsePath, 10000);
+    if (!result) {
+      return { content: [{ type: 'text' as const, text: 'Search timed out.' }] };
+    }
+    if (result.length === 0) {
+      return { content: [{ type: 'text' as const, text: `No conversations found matching "${args.query}".` }] };
+    }
+    const formatted = result.map((s: { id: number; name: string; archived_at: string }) =>
+      `- [${s.id}] "${s.name}" (saved ${s.archived_at})`
+    ).join('\n');
+    return { content: [{ type: 'text' as const, text: `Found ${result.length} conversation(s):\n${formatted}` }] };
   },
 );
 

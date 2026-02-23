@@ -8,3 +8,5 @@ export { RefreshGroupsHandler } from './refresh-groups.js';
 export { RegisterGroupHandler } from './register-group.js';
 export { ClearSessionHandler } from './clear-session.js';
 export { ResumeSessionHandler } from './resume-session.js';
+export { SearchSessionsHandler } from './search-sessions.js';
+export { ArchiveSessionHandler } from './archive-session.js';

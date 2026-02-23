@@ -22,6 +22,7 @@ import {
   getAllChats,
   getAllRegisteredGroups,
   getAllTasks,
+  getConversationArchives,
   getMessagesSince,
   getNewMessages,
   getRouterState,
@@ -242,13 +243,13 @@ async function runAgent(
   );
 
   // Update session history snapshot for container to read
-  const sessionHistory = sessionManager.getHistory(group.folder);
+  const conversationArchives = getConversationArchives(group.folder);
   writeSessionHistorySnapshot(
     group.folder,
-    sessionHistory.map((s) => ({
+    conversationArchives.map((s) => ({
       id: s.id,
       name: s.name,
-      created_at: s.created_at,
+      session_id: s.session_id,
       archived_at: s.archived_at,
     })),
   );

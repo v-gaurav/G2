@@ -108,6 +108,7 @@ export class DefaultMountFactory implements IMountFactory {
     fs.mkdirSync(path.join(groupIpcDir, 'messages'), { recursive: true });
     fs.mkdirSync(path.join(groupIpcDir, 'tasks'), { recursive: true });
     fs.mkdirSync(path.join(groupIpcDir, 'input'), { recursive: true });
+    fs.mkdirSync(path.join(groupIpcDir, 'responses'), { recursive: true });
     mounts.push({
       hostPath: groupIpcDir,
       containerPath: '/workspace/ipc',

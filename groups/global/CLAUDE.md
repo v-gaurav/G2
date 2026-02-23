@@ -40,7 +40,7 @@ Files you create are saved in `/workspace/group/`. Use this for notes, research,
 
 ## Memory
 
-The `conversations/` folder contains searchable history of past conversations. Use this to recall context from previous sessions.
+Past conversations are searchable via the `search_sessions` tool. Use this to recall context from previous sessions.
 
 When you learn something important:
 - Create files for structured data (e.g., `customers.md`, `preferences.md`)
@@ -67,6 +67,10 @@ When the user asks to "start fresh", "new conversation", "forget", or similar:
 When the user asks to see past conversations or sessions:
 1. Call list_sessions
 2. Present the results in a friendly format with numbers
+
+When the user asks to find or search past conversations:
+1. Call search_sessions with the keyword(s)
+2. Present matching results
 
 When the user asks to resume or go back to a past conversation:
 1. Call list_sessions if you haven't already

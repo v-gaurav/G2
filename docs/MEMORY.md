@@ -6,11 +6,10 @@ How conversation state is stored, resumed, archived, and searched.
 
 ## Overview
 
-The memory system has three layers:
+The memory system has two layers:
 
 1. **Claude Agent SDK sessions** — the actual conversation state the agent has access to during a query
-2. **Session pointer tables in SQLite** — track which session is active per group and bookmark old ones for switching
-3. **Conversation archives** — human-readable markdown transcripts searchable by the agent
+2. **SQLite tables** — track which session is active per group (`sessions`) and store archived conversations with searchable content (`conversation_archives`)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -40,26 +39,20 @@ The memory system has three layers:
 │  │ dev-team   │ 7b8ff97a-...     │       │
 │  └────────────┴──────────────────┘       │
 │                                          │
-│  session_history table                   │
-│  ┌──┬────────────┬──────────────┬──────┐ │
-│  │id│group_folder│ session_id   │ name │ │
-│  ├──┼────────────┼──────────────┼──────┤ │
-│  │ 2│ main       │ 5768e1ec-... │ "Tax"│ ← archived session bookmarks
-│  │ 3│ main       │ 40b21204-... │ "..." │ │
-│  └──┴────────────┴──────────────┴──────┘ │
-└──────────────────────────────────────────┘
-
-┌──────────────────────────────────────────┐
-│  groups/{group}/conversations/           │
-│  ├── 2026-02-20-tax-research.md          │
-│  ├── 2026-02-21-wind-down-reminder.md    │
-│  └── ...                                 │
-│                                          │
-│  (Searchable markdown transcripts.       │
-│   Written on clear_session and on        │
-│   SDK compaction via PreCompact hook.)   │
+│  conversation_archives table             │
+│  ┌──┬────────────┬──────────────┬──────┬─────────┐
+│  │id│group_folder│ session_id   │ name │ content │
+│  ├──┼────────────┼──────────────┼──────┼─────────┤
+│  │ 2│ main       │ 5768e1ec-... │ "Tax"│ "# T.."│ ← archived with transcript
+│  │ 3│ main       │ 40b21204-... │ "..." │ "# .."│
+│  └──┴────────────┴──────────────┴──────┴─────────┘
 └──────────────────────────────────────────┘
 ```
+
+### What was removed
+
+- **`session_history` table** — replaced by `conversation_archives` (which adds `content` column for searchable transcripts)
+- **`conversations/` folder** — markdown transcript files are no longer written to disk; content is stored in the `conversation_archives` table instead
 
 ---
 
@@ -124,13 +117,13 @@ When `resume` is `undefined`, the SDK creates a new session and returns the new 
 
 ### Compaction
 
-When the conversation grows too long for the context window, the SDK automatically **compacts** the transcript — older messages are summarized and the `.jsonl` is rewritten with compacted content. After compaction, the original verbatim messages are lost from the SDK state. The `PreCompact` hook (see Layer 3) captures the full transcript before this happens.
+When the conversation grows too long for the context window, the SDK automatically **compacts** the transcript — older messages are summarized and the `.jsonl` is rewritten with compacted content. After compaction, the original verbatim messages are lost from the SDK state. The `PreCompact` hook captures the full transcript before this happens and stores it in `conversation_archives` via IPC.
 
 ---
 
-## Layer 2: Session Pointer Tables
+## Layer 2: SQLite Tables
 
-The SQLite database does not store conversation content. It stores **pointers** — which session UUID is active for each group, and bookmarks of old session UUIDs for switching.
+The SQLite database stores **pointers** (which session UUID is active for each group) and **archived conversations** with searchable content.
 
 ### `sessions` table
 
@@ -143,20 +136,21 @@ CREATE TABLE sessions (
 
 Maps each group to its currently active session UUID. This is what `SessionManager.get()` returns, and what gets passed as `resume` to the SDK.
 
-### `session_history` table
+### `conversation_archives` table
 
 ```sql
-CREATE TABLE session_history (
+CREATE TABLE conversation_archives (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   group_folder TEXT NOT NULL,
   session_id TEXT NOT NULL,
   name TEXT NOT NULL,
-  created_at TEXT NOT NULL,
+  content TEXT NOT NULL DEFAULT '',
   archived_at TEXT NOT NULL
 );
+CREATE INDEX idx_archives_group ON conversation_archives(group_folder);
 ```
 
-Bookmarks of previous session UUIDs with human-friendly names. Used by `list_sessions` and `resume_session` to let the agent switch between past conversations.
+Stores archived conversations with both the session UUID (for resuming) and the full transcript content (for searching). Used by `list_sessions`, `search_sessions`, and `resume_session`.
 
 ### `SessionManager` (`src/session-manager.ts`)
 
@@ -167,84 +161,37 @@ In-memory cache backed by SQLite. Provides:
 | `get(groupFolder)` | Return active session UUID |
 | `set(groupFolder, sessionId)` | Set active session (memory + DB) |
 | `delete(groupFolder)` | Remove active session pointer |
-| `archive(groupFolder, name)` | Copy current pointer to `session_history` |
-| `restore(groupFolder, historyId)` | Move a `session_history` entry back to `sessions` |
-| `getHistory(groupFolder)` | List archived sessions for a group |
+| `getAll()` | Return all active sessions |
+| `loadFromDb()` | Load all sessions from DB into memory |
+
+### Database accessor functions (`src/db.ts`)
+
+| Function | Purpose |
+|---|---|
+| `insertConversationArchive(groupFolder, sessionId, name, content, archivedAt)` | Archive a conversation with transcript |
+| `getConversationArchives(groupFolder)` | List archives for a group (no content, for snapshots) |
+| `getConversationArchiveById(id)` | Get a single archive with content |
+| `searchConversationArchives(groupFolder, query)` | Full-text search archives by content |
+| `deleteConversationArchive(id)` | Remove an archive (when resumed) |
 
 ### Snapshot pattern
 
-Containers have no direct DB access. Before each container spawn, the host writes a JSON snapshot of the session history to `data/ipc/{group}/session_history.json`. The `list_sessions` MCP tool reads this file. Same pattern used for `current_tasks.json` and `available_groups.json`.
+Containers have no direct DB access. Before each container spawn, the host writes a JSON snapshot of the conversation archives to `data/ipc/{group}/session_history.json`. The `list_sessions` MCP tool reads this file. Same pattern used for `current_tasks.json` and `available_groups.json`.
 
----
+### IPC round-trip pattern (search_sessions)
 
-## Layer 3: Conversation Archives
+For `search_sessions`, the container needs a response from the host. This uses an IPC round-trip:
 
-Human-readable markdown transcripts stored in each group's `conversations/` folder. These are the only artifacts the agent can search by content to find past conversations.
-
-### Location
-
-```
-groups/{group}/conversations/
-├── 2026-02-20-tax-research.md
-├── 2026-02-21-wind-down-reminder-setup.md
-└── ...
-```
-
-Mounted into the container at `/workspace/group/conversations/`.
-
-### When archives are written
-
-Archives are created by two independent mechanisms:
-
-**1. On `clear_session` (host-side, `src/ipc-handlers/clear-session.ts`)**
-
-When the agent calls the `clear_session` MCP tool, the host handler reads the session's `.jsonl` transcript from `data/sessions/{group}/.claude/projects/-workspace-group/{sessionId}.jsonl`, parses it, and writes a markdown file to `groups/{group}/conversations/`. This is the primary archival mechanism — every explicitly cleared session gets a searchable archive.
-
-**2. On SDK compaction (container-side, `container/agent-runner/src/index.ts`)**
-
-The `PreCompact` hook fires before the SDK compacts a long conversation. It reads the full transcript (via the SDK-provided `transcript_path`), parses it, and writes markdown to `/workspace/group/conversations/`. This captures the full pre-compaction detail that would otherwise be summarized away in the `.jsonl`.
-
-Both mechanisms use the same transcript format:
-
-```markdown
-# Travel Planning
-
-Archived: Feb 21, 3:39 AM
-
----
-
-**User**: I want to plan a trip to Japan...
-
-**G2**: Here are some suggestions...
-```
-
-### Transcript parsing
-
-The `.jsonl` transcript is parsed line by line. Each line is a JSON object with a `type` field:
-
-- `type: "user"` — user message, content extracted from `message.content` (string or array of `{text}` blocks)
-- `type: "assistant"` — agent response, text parts extracted from `message.content` array where `type === "text"`
-- Other types (system, tool use, etc.) are skipped
-
-Messages longer than 2000 characters are truncated in the archive.
-
-### How the agent uses archives
-
-The agent's `CLAUDE.md` instructs it:
-
-> The `conversations/` folder contains searchable history of past conversations. Use this to recall context from previous sessions.
-
-When a user asks to "switch to the conversation where I talked about XYZ", the agent can:
-
-1. `Grep` through `conversations/*.md` for the topic
-2. Match the filename to a session name in `list_sessions`
-3. Call `resume_session` to switch
+1. Container writes request to `tasks/` with a `requestId`
+2. Host `SearchSessionsHandler` queries the DB and writes the result to `responses/{requestId}.json`
+3. Container polls `responses/{requestId}.json` until it appears (with timeout)
+4. Container reads the result and deletes the file
 
 ---
 
 ## Session Lifecycle
 
-### New session
+### First message (new session)
 
 ```
 1. First message to group
@@ -255,7 +202,7 @@ When a user asks to "switch to the conversation where I talked about XYZ", the a
 6. SessionManager.set(groupFolder, newSessionId) writes to sessions table
 ```
 
-### Active session (subsequent messages)
+### Ongoing messages (active session)
 
 ```
 1. Message arrives for group
@@ -273,26 +220,68 @@ When a user asks to "switch to the conversation where I talked about XYZ", the a
 2. MCP tool writes IPC file to /workspace/ipc/tasks/
 3. Host ClearSessionHandler:
    a. Reads current sessionId from SessionManager
-   b. Reads .jsonl transcript, writes markdown to conversations/
-   c. Archives sessionId + name to session_history table
+   b. Reads .jsonl transcript, formats as markdown
+   c. Inserts into conversation_archives (sessionId + name + content)
    d. Deletes sessionId from sessions table
    e. Writes _close sentinel to stop the container
 4. Next message spawns container with sessionId = undefined → new session
 5. Old .jsonl remains on disk in .claude/projects/
 ```
 
+### List sessions
+
+```
+1. Host writes conversation_archives snapshot to session_history.json before spawning container
+2. Agent calls list_sessions → reads session_history.json snapshot
+3. Returns list of archived conversations with IDs and names
+```
+
+### Search sessions
+
+```
+1. Agent calls search_sessions with keyword(s)
+2. MCP tool writes IPC request to tasks/ with requestId
+3. Host SearchSessionsHandler queries conversation_archives WHERE content LIKE '%query%'
+4. Host writes result to responses/{requestId}.json
+5. MCP tool polls and reads the response file
+6. Returns matching conversations
+```
+
 ### Resume session
 
 ```
 1. Agent calls list_sessions → reads session_history.json snapshot
-2. Agent calls resume_session with history ID
+2. Agent calls resume_session with archive ID
 3. Host ResumeSessionHandler:
-   a. Archives current session to session_history (if save name provided)
-   b. Restores target session_id from session_history into sessions table
-   c. Removes the history entry (it's now the active session again)
-   d. Writes _close sentinel to stop the container
+   a. Looks up target in conversation_archives by ID → gets session_id
+   b. Archives current session to conversation_archives (if save name provided)
+   c. Sets target session_id as active in sessions table
+   d. Deletes the target from conversation_archives (it's now active)
+   e. Writes _close sentinel to stop the container
 4. Next message spawns container with resume: restored sessionId
 5. SDK loads the old .jsonl → agent has that conversation's context
+```
+
+### PreCompact (SDK compaction)
+
+```
+1. SDK determines conversation is too long, triggers PreCompact hook
+2. PreCompact hook in agent-runner:
+   a. Reads full transcript from transcript_path
+   b. Parses and formats as markdown
+   c. Writes IPC file to tasks/ with type: archive_session
+3. Host ArchiveSessionHandler inserts into conversation_archives
+4. SDK compacts the transcript (summarizes old messages)
+5. Full pre-compaction content is preserved in the archive
+```
+
+### Scheduled tasks
+
+```
+1. Task scheduler spawns container for the group
+2. If context_mode is "group": container gets the group's active sessionId
+3. If context_mode is "isolated": container gets sessionId = undefined (fresh)
+4. Task executes, session management works the same as regular messages
 ```
 
 ---
@@ -305,8 +294,7 @@ Each group's memory is fully isolated:
 |---|---|
 | SDK state | `data/sessions/{group}/.claude/` — separate directory per group |
 | Session pointers | `sessions` table keyed by `group_folder` |
-| Session history | `session_history` table filtered by `group_folder` |
-| Conversation archives | `groups/{group}/conversations/` — per-group directory |
+| Conversation archives | `conversation_archives` table filtered by `group_folder` |
 | IPC snapshots | `data/ipc/{group}/session_history.json` — per-group |
 
 Non-main groups cannot access other groups' sessions, archives, or history. Main group has access to the full project filesystem including all group directories.
@@ -330,12 +318,15 @@ Main group doesn't need this mount since it has direct access to the entire proj
 | File | Layer | Purpose |
 |---|---|---|
 | `src/session-manager.ts` | 2 | In-memory + SQLite session pointer management |
-| `src/db.ts` | 2 | SQLite schema and accessors for sessions/history |
-| `src/ipc-handlers/clear-session.ts` | 2, 3 | Archive session pointer + write conversation markdown |
-| `src/ipc-handlers/resume-session.ts` | 2 | Restore session pointer from history |
+| `src/db.ts` | 2 | SQLite schema and accessors for sessions/archives |
+| `src/ipc-handlers/archive-utils.ts` | — | Shared transcript parsing and formatting |
+| `src/ipc-handlers/clear-session.ts` | 2 | Archive session + transcript to conversation_archives |
+| `src/ipc-handlers/resume-session.ts` | 2 | Restore session pointer from archives |
+| `src/ipc-handlers/search-sessions.ts` | 2 | IPC round-trip handler for search_sessions |
+| `src/ipc-handlers/archive-session.ts` | 2 | IPC handler for PreCompact archive writes |
 | `src/interfaces/default-mount-factory.ts` | 1 | Mount `.claude/` directory, init settings, sync skills |
 | `src/container-runner.ts` | 1, 2 | Write session history snapshot, capture newSessionId |
-| `container/agent-runner/src/index.ts` | 1, 3 | SDK query with resume, PreCompact hook |
-| `container/agent-runner/src/ipc-mcp-stdio.ts` | — | MCP tools: clear/list/resume session |
-| `groups/{group}/CLAUDE.md` | — | Per-group instructions (references conversations/) |
+| `container/agent-runner/src/index.ts` | 1 | SDK query with resume, PreCompact hook (writes IPC) |
+| `container/agent-runner/src/ipc-mcp-stdio.ts` | — | MCP tools: clear/list/resume/search session |
+| `groups/{group}/CLAUDE.md` | — | Per-group instructions (references search_sessions) |
 | `groups/global/CLAUDE.md` | — | Global instructions appended to system prompt |

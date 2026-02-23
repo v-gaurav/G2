@@ -75,15 +75,32 @@ function createSchema(database: Database.Database): void {
       container_config TEXT,
       requires_trigger INTEGER DEFAULT 1
     );
-    CREATE TABLE IF NOT EXISTS session_history (
+    CREATE TABLE IF NOT EXISTS conversation_archives (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       group_folder TEXT NOT NULL,
       session_id TEXT NOT NULL,
       name TEXT NOT NULL,
-      created_at TEXT NOT NULL,
+      content TEXT NOT NULL DEFAULT '',
       archived_at TEXT NOT NULL
     );
+    CREATE INDEX IF NOT EXISTS idx_archives_group ON conversation_archives(group_folder);
   `);
+
+  // Migrate session_history → conversation_archives (safe to run multiple times)
+  try {
+    const hasOldTable = database.prepare(
+      `SELECT name FROM sqlite_master WHERE type='table' AND name='session_history'`,
+    ).get();
+    if (hasOldTable) {
+      database.exec(`
+        INSERT INTO conversation_archives (group_folder, session_id, name, content, archived_at)
+        SELECT group_folder, session_id, name, '', archived_at FROM session_history
+      `);
+      database.exec(`DROP TABLE session_history`);
+    }
+  } catch {
+    /* migration already ran or table doesn't exist */
+  }
 
   // Add context_mode column if it doesn't exist (migration for existing DBs)
   try {
@@ -513,44 +530,60 @@ export function getAllSessions(): Record<string, string> {
   return result;
 }
 
-// --- Session history accessors ---
+// --- Conversation archive accessors ---
 
-export interface SessionHistoryRow {
+export interface ConversationArchiveRow {
   id: number;
   group_folder: string;
   session_id: string;
   name: string;
-  created_at: string;
+  content: string;
   archived_at: string;
 }
 
-export function archiveSession(
+export function insertConversationArchive(
   groupFolder: string,
   sessionId: string,
   name: string,
-  createdAt: string,
+  content: string,
+  archivedAt: string,
 ): void {
   db.prepare(
-    `INSERT INTO session_history (group_folder, session_id, name, created_at, archived_at) VALUES (?, ?, ?, ?, ?)`,
-  ).run(groupFolder, sessionId, name, createdAt, new Date().toISOString());
+    `INSERT INTO conversation_archives (group_folder, session_id, name, content, archived_at) VALUES (?, ?, ?, ?, ?)`,
+  ).run(groupFolder, sessionId, name, content, archivedAt);
 }
 
-export function getSessionHistory(groupFolder: string): SessionHistoryRow[] {
+export function getConversationArchives(
+  groupFolder: string,
+): Omit<ConversationArchiveRow, 'content'>[] {
   return db
     .prepare(
-      'SELECT id, group_folder, session_id, name, created_at, archived_at FROM session_history WHERE group_folder = ? ORDER BY archived_at DESC',
+      'SELECT id, group_folder, session_id, name, archived_at FROM conversation_archives WHERE group_folder = ? ORDER BY archived_at DESC',
     )
-    .all(groupFolder) as SessionHistoryRow[];
+    .all(groupFolder) as Omit<ConversationArchiveRow, 'content'>[];
 }
 
-export function restoreSession(id: number): SessionHistoryRow | undefined {
-  const row = db
-    .prepare('SELECT * FROM session_history WHERE id = ?')
-    .get(id) as SessionHistoryRow | undefined;
-  if (row) {
-    db.prepare('DELETE FROM session_history WHERE id = ?').run(id);
-  }
-  return row;
+export function getConversationArchiveById(
+  id: number,
+): ConversationArchiveRow | undefined {
+  return db
+    .prepare('SELECT * FROM conversation_archives WHERE id = ?')
+    .get(id) as ConversationArchiveRow | undefined;
+}
+
+export function searchConversationArchives(
+  groupFolder: string,
+  query: string,
+): Omit<ConversationArchiveRow, 'content'>[] {
+  return db
+    .prepare(
+      `SELECT id, group_folder, session_id, name, archived_at FROM conversation_archives WHERE group_folder = ? AND content LIKE ? ORDER BY archived_at DESC`,
+    )
+    .all(groupFolder, `%${query}%`) as Omit<ConversationArchiveRow, 'content'>[];
+}
+
+export function deleteConversationArchive(id: number): void {
+  db.prepare('DELETE FROM conversation_archives WHERE id = ?').run(id);
 }
 
 // --- Registered group accessors ---

@@ -47,6 +47,9 @@ Single Node.js process that connects to WhatsApp, routes messages to Claude Agen
 | `src/ipc-handlers/cancel-task.ts` | Handle `cancel_task` IPC command |
 | `src/ipc-handlers/clear-session.ts` | Handle `clear_session` IPC command |
 | `src/ipc-handlers/resume-session.ts` | Handle `resume_session` IPC command |
+| `src/ipc-handlers/search-sessions.ts` | Handle `search_sessions` IPC command (round-trip) |
+| `src/ipc-handlers/archive-session.ts` | Handle `archive_session` IPC command (PreCompact) |
+| `src/ipc-handlers/archive-utils.ts` | Shared transcript parsing and formatting |
 | `src/ipc-handlers/refresh-groups.ts` | Handle `refresh_groups` IPC command |
 
 ### Interfaces (`src/interfaces/`)

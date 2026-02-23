@@ -9,6 +9,7 @@ import {
 import { AvailableGroup } from './container-runner.js';
 import { canSendMessage } from './authorization.js';
 import {
+  ArchiveSessionHandler,
   CancelTaskHandler,
   ClearSessionHandler,
   IpcCommandDispatcher,
@@ -18,6 +19,7 @@ import {
   ResumeSessionHandler,
   ResumeTaskHandler,
   ScheduleTaskHandler,
+  SearchSessionsHandler,
 } from './ipc-handlers/index.js';
 import { logger } from './logger.js';
 import { SessionManager } from './session-manager.js';
@@ -32,6 +34,8 @@ const dispatcher = new IpcCommandDispatcher([
   new RegisterGroupHandler(),
   new ClearSessionHandler(),
   new ResumeSessionHandler(),
+  new SearchSessionsHandler(),
+  new ArchiveSessionHandler(),
 ]);
 
 export interface IpcDeps {

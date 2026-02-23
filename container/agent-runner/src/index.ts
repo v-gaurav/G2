@@ -139,8 +139,18 @@ function getSessionSummary(sessionId: string, transcriptPath: string): string | 
   return null;
 }
 
+function writeIpcTaskFile(data: object): void {
+  const dir = '/workspace/ipc/tasks';
+  fs.mkdirSync(dir, { recursive: true });
+  const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.json`;
+  const filepath = path.join(dir, filename);
+  const tempPath = `${filepath}.tmp`;
+  fs.writeFileSync(tempPath, JSON.stringify(data, null, 2));
+  fs.renameSync(tempPath, filepath);
+}
+
 /**
- * Archive the full transcript to conversations/ before compaction.
+ * Archive the full transcript to conversation_archives via IPC before compaction.
  */
 function createPreCompactHook(): HookCallback {
   return async (input, _toolUseId, _context) => {
@@ -163,19 +173,20 @@ function createPreCompactHook(): HookCallback {
       }
 
       const summary = getSessionSummary(sessionId, transcriptPath);
-      const name = summary ? sanitizeFilename(summary) : generateFallbackName();
-
-      const conversationsDir = '/workspace/group/conversations';
-      fs.mkdirSync(conversationsDir, { recursive: true });
-
-      const date = new Date().toISOString().split('T')[0];
-      const filename = `${date}-${name}.md`;
-      const filePath = path.join(conversationsDir, filename);
+      const name = summary || generateFallbackName();
 
       const markdown = formatTranscriptMarkdown(messages, summary);
-      fs.writeFileSync(filePath, markdown);
 
-      log(`Archived conversation to ${filePath}`);
+      writeIpcTaskFile({
+        type: 'archive_session',
+        sessionId,
+        name,
+        content: markdown,
+        groupFolder: process.env.G2_GROUP_FOLDER || 'unknown',
+        timestamp: new Date().toISOString(),
+      });
+
+      log(`Archived conversation via IPC (session: ${sessionId}, name: ${name})`);
     } catch (err) {
       log(`Failed to archive transcript: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -212,14 +223,6 @@ function createSanitizeBashHook(): HookCallback {
       },
     };
   };
-}
-
-function sanitizeFilename(summary: string): string {
-  return summary
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 50);
 }
 
 function generateFallbackName(): string {
