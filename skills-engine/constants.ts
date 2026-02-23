@@ -1,0 +1,9 @@
+export const G2_DIR = '.g2';
+export const STATE_FILE = 'state.yaml';
+export const BASE_DIR = '.g2/base';
+export const BACKUP_DIR = '.g2/backup';
+export const LOCK_FILE = '.g2/lock';
+export const CUSTOM_DIR = '.g2/custom';
+export const RESOLUTIONS_DIR = '.g2/resolutions';
+export const SHIPPED_RESOLUTIONS_DIR = '.claude/resolutions';
+export const SKILLS_SCHEMA_VERSION = '0.1.0';
