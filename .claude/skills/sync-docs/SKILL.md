@@ -49,6 +49,7 @@ Read every documentation file that references codebase structure:
 |------|--------------|
 | `CLAUDE.md` | Key Files tables — every non-test `src/` file should appear |
 | `README.md` | Architecture "Key files" list, philosophy language |
+| `docs/ARCHITECTURE.md` | Layer descriptions, mount tables, IPC commands, SQLite tables, startup sequence — must match actual source |
 | `docs/SPEC.md` | Folder Structure tree — must mirror actual `src/` layout |
 | `docs/REQUIREMENTS.md` | Design Patterns section — must name actual interfaces, classes, modules |
 | `.claude/skills/*/modify/*.intent.md` | File paths in intent headers must still exist |
@@ -65,6 +66,7 @@ For each documentation file, check for these categories of staleness:
 
 Compare the `find src` output against what's listed in:
 - `CLAUDE.md` Key Files tables
+- `docs/ARCHITECTURE.md` layer descriptions
 - `docs/SPEC.md` Folder Structure tree
 
 Every non-test `.ts` file in `src/` should appear in both. If a file is missing from the docs, add it with an accurate description based on reading its exports.
@@ -81,6 +83,7 @@ For files that exist in both the codebase and docs, verify the description is st
 
 If new directories were added under `src/` (e.g., `src/interfaces/`, `src/ipc-handlers/`), they need:
 - A section in `CLAUDE.md` Key Files
+- Coverage in the appropriate layer in `docs/ARCHITECTURE.md`
 - A directory entry in `docs/SPEC.md` Folder Structure
 - Mention in `docs/REQUIREMENTS.md` Design Patterns if they represent a pattern
 
@@ -93,7 +96,7 @@ Check for phrases that may no longer be accurate after refactoring:
 
 Grep for these patterns:
 ```bash
-grep -rn 'handful\|few source\|few files\|minimal glue\|no abstraction' CLAUDE.md README.md docs/REQUIREMENTS.md docs/SPEC.md
+grep -rn 'handful\|few source\|few files\|minimal glue\|no abstraction' CLAUDE.md README.md docs/ARCHITECTURE.md docs/REQUIREMENTS.md docs/SPEC.md
 ```
 
 ### 3f. Stale intent files
@@ -123,6 +126,7 @@ For each issue found, make the edit directly. Follow these rules:
 
 - **CLAUDE.md**: Organize Key Files into categorized tables by directory (Core, Channels & Routing, Container & Execution, IPC Handlers, Interfaces, Security & Validation, Other). Every non-test source file gets a row.
 - **README.md**: The Architecture "Key files" list should be a curated summary (not exhaustive) — list the most important files plus directory-level entries for `src/interfaces/` and `src/ipc-handlers/`.
+- **docs/ARCHITECTURE.md**: Layer descriptions must reference actual source files. Mount tables must match `DefaultMountFactory` logic. IPC command table must match handlers in `src/ipc-handlers/`. SQLite table list must match `src/db.ts` schema. Authorization matrix must match `src/authorization.ts`. Startup sequence must match `main()` in `src/index.ts`. Config values (intervals, timeouts, concurrency limits) must match `src/config.ts`.
 - **docs/SPEC.md**: The Folder Structure tree must show every file and directory exactly as they exist on disk.
 - **docs/REQUIREMENTS.md**: The Design Patterns section should name actual classes/interfaces/functions. Architecture Decisions subsections should reference the modules that implement them.
 - **Language fixes**: Replace stale phrases with accurate ones. Don't overstate or understate the codebase size.
@@ -133,12 +137,12 @@ After all edits, do a final sanity check:
 
 ```bash
 # Every src/ file path mentioned in docs should exist
-grep -roh 'src/[a-zA-Z0-9_\-/]*\.ts' CLAUDE.md README.md docs/SPEC.md docs/REQUIREMENTS.md | sort -u | while read f; do
+grep -roh 'src/[a-zA-Z0-9_\-/]*\.ts' CLAUDE.md README.md docs/ARCHITECTURE.md docs/SPEC.md docs/REQUIREMENTS.md | sort -u | while read f; do
   [ -f "$f" ] || echo "BROKEN REF: $f"
 done
 
 # Every container/ path mentioned in docs should exist
-grep -roh 'container/[a-zA-Z0-9_\-/]*\.[a-z]*' CLAUDE.md README.md docs/SPEC.md docs/REQUIREMENTS.md | sort -u | while read f; do
+grep -roh 'container/[a-zA-Z0-9_\-/]*\.[a-z]*' CLAUDE.md README.md docs/ARCHITECTURE.md docs/SPEC.md docs/REQUIREMENTS.md | sort -u | while read f; do
   [ -f "$f" ] || echo "BROKEN REF: $f"
 done
 ```
@@ -152,3 +156,5 @@ If any broken refs remain, fix them.
 - Does not update `docs/APPLE-CONTAINER-NETWORKING.md` (networking guide, not codebase structure)
 - Does not update `docs/g2-architecture-final.md` or `docs/g2-nanorepo-architecture.md` (skills system architecture, not source structure)
 - Does not modify source code — only documentation files
+
+**Note:** `docs/ARCHITECTURE.md` IS in scope — it documents the runtime system architecture and must stay in sync with the source code.
