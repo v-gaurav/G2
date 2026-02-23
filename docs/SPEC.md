@@ -89,7 +89,9 @@ g2/
 ├── CLAUDE.md                      # Project context for Claude Code
 ├── docs/
 │   ├── SPEC.md                    # This specification document
+│   ├── ARCHITECTURE.md            # System architecture
 │   ├── REQUIREMENTS.md            # Architecture decisions
+│   ├── HEARTBEAT.md               # Polling loops and task scheduler
 │   └── SECURITY.md                # Security model
 ├── README.md                      # User documentation
 ├── package.json                   # Node.js dependencies
@@ -115,9 +117,14 @@ g2/
 │   ├── group-queue.ts             # Per-group queue with global concurrency limit
 │   ├── task-scheduler.ts          # Runs scheduled tasks when due
 │   ├── session-manager.ts         # Claude Agent SDK session management per group
-│   ├── ipc.ts                     # IPC watcher and task processing
+│   ├── poll-loop.ts               # Shared polling loop abstraction
+│   ├── idle-timer.ts              # Shared idle timer utility
+│   ├── ipc-transport.ts           # File-based IPC write operations
+│   ├── task-snapshots.ts          # Task snapshot writing for containers
+│   ├── ipc.ts                     # IPC watcher (fs.watch + fallback poll)
 │   ├── ipc-handlers/              # Modular IPC command handlers
 │   │   ├── index.ts               # Exports all handlers
+│   │   ├── types.ts               # IpcCommandHandler interface
 │   │   ├── dispatcher.ts          # Routes IPC commands to handlers
 │   │   ├── types.ts               # IpcCommandHandler interface
 │   │   ├── schedule-task.ts       # Handle schedule_task command
@@ -127,6 +134,9 @@ g2/
 │   │   ├── cancel-task.ts         # Handle cancel_task command
 │   │   ├── clear-session.ts       # Handle clear_session command
 │   │   ├── resume-session.ts      # Handle resume_session command
+│   │   ├── search-sessions.ts    # Handle search_sessions command (round-trip)
+│   │   ├── archive-session.ts    # Handle archive_session command (PreCompact)
+│   │   ├── archive-utils.ts      # Shared transcript parsing and formatting
 │   │   └── refresh-groups.ts      # Handle refresh_groups command
 │   ├── interfaces/                # Composable abstraction layer
 │   │   ├── index.ts               # Exports all interfaces
@@ -141,6 +151,7 @@ g2/
 │   ├── trigger-validator.ts       # Trigger pattern matching for non-main groups
 │   ├── timeout-config.ts          # Container timeout configuration
 │   └── whatsapp-auth.ts           # Standalone WhatsApp authentication
+│
 │
 ├── container/
 │   ├── Dockerfile                 # Container image (runs as 'node' user, includes Claude Code CLI)
@@ -219,7 +230,7 @@ export const DATA_DIR = path.resolve(PROJECT_ROOT, 'data');
 // Container configuration
 export const CONTAINER_IMAGE = process.env.CONTAINER_IMAGE || 'g2-agent:latest';
 export const CONTAINER_TIMEOUT = parseInt(process.env.CONTAINER_TIMEOUT || '1800000', 10); // 30min default
-export const IPC_POLL_INTERVAL = 1000;
+export const IPC_POLL_INTERVAL = 1000; // Base interval; IPC watcher uses fs.watch with 10x fallback poll
 export const IDLE_TIMEOUT = parseInt(process.env.IDLE_TIMEOUT || '1800000', 10); // 30min — keep container alive after last result
 export const MAX_CONCURRENT_CONTAINERS = Math.max(1, parseInt(process.env.MAX_CONCURRENT_CONTAINERS || '5', 10) || 5);
 

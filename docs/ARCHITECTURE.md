@@ -143,7 +143,7 @@ Additional mounts are validated against the mount allowlist (`~/.config/g2/mount
 
 ### 6. IPC (Container <-> Host)
 
-File-based IPC through bind-mounted directories. The host polls every `IPC_POLL_INTERVAL` (1s).
+File-based IPC through bind-mounted directories. The host uses `fs.watch()` with `{ recursive: true }` for event-driven processing, plus a 10-second fallback poll for reliability.
 
 **Container -> Host:**
 
@@ -171,6 +171,8 @@ File-based IPC through bind-mounted directories. The host polls every `IPC_POLL_
 | `refresh_groups` | Main only | Re-sync WhatsApp metadata |
 | `clear_session` | Own session (main: any) | Archive and reset session |
 | `resume_session` | Own session (main: any) | Restore archived session |
+| `search_sessions` | Own session (main: any) | Query archived sessions |
+| `archive_session` | Own session (main: any) | Archive current transcript |
 
 Commands are dispatched by `IpcCommandDispatcher` to modular handlers in `src/ipc-handlers/`.
 
@@ -178,11 +180,13 @@ The agent exposes these commands as MCP tools via `ipc-mcp-stdio.ts` (runs as su
 
 ### 7. Task Scheduling
 
-`TaskScheduler` polls SQLite every `SCHEDULER_POLL_INTERVAL` (60s) for due tasks:
+`startSchedulerLoop()` polls SQLite every `SCHEDULER_POLL_INTERVAL` (60s) for due tasks:
 
 ```sql
-SELECT * FROM scheduled_tasks WHERE status='active' AND next_run <= NOW()
+SELECT * FROM scheduled_tasks WHERE status='active' AND next_run IS NOT NULL AND next_run <= ?
 ```
+
+Tasks are atomically claimed via `claimTask()` (sets `next_run = NULL`) to prevent duplicate execution when tasks run longer than 60s. See [HEARTBEAT.md](HEARTBEAT.md) for the full lifecycle.
 
 **Schedule types:**
 - `cron` — standard cron expressions, parsed with timezone awareness
@@ -262,7 +266,7 @@ main()
   5. WhatsApp channel connect           — auth, WebSocket
   6. channelRegistry.register()         — register WhatsApp
   7. startSchedulerLoop()               — 60s task polling
-  8. startIpcWatcher()                  — 1s IPC polling
+  8. startIpcWatcher()                  — fs.watch + 10s fallback IPC polling
   9. queue.setProcessMessagesFn()       — wire message handler
  10. recoverPendingMessages()           — re-queue unprocessed messages from crash
  11. startMessageLoop()                 — 2s message polling
@@ -292,5 +296,6 @@ Agent output flows through `src/router.ts`:
 | Fair scheduling | Global concurrency limit + per-group queue, no starvation |
 | Streaming output | Agent results sent immediately via sentinel markers |
 | Channel abstraction | `Channel` interface + `ChannelRegistry` for pluggable transports |
-| File-based IPC | Atomic JSON file writes, host polling, no sockets |
+| File-based IPC | Atomic JSON file writes, `fs.watch` + fallback poll, no sockets |
+| Shared utilities | `startPollLoop`, `createIdleTimer`, `IpcTransport`, `refreshTasksSnapshot` |
 | Untrusted containers | Host validates every IPC command before acting |

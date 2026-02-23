@@ -454,6 +454,24 @@ export function getDueTasks(): ScheduledTask[] {
     .all(now) as ScheduledTask[];
 }
 
+/**
+ * Atomically claim a task for execution by nullifying its next_run.
+ * Returns true if the task was claimed (row was updated), false if
+ * it was already claimed by another tick or paused/cancelled.
+ */
+export function claimTask(id: string): boolean {
+  const result = db
+    .prepare(
+      `
+    UPDATE scheduled_tasks
+    SET next_run = NULL
+    WHERE id = ? AND status = 'active' AND next_run IS NOT NULL
+  `,
+    )
+    .run(id);
+  return result.changes > 0;
+}
+
 export function updateTaskAfterRun(
   id: string,
   nextRun: string | null,

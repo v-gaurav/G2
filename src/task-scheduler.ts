@@ -10,16 +10,18 @@ import {
   SCHEDULER_POLL_INTERVAL,
   TIMEZONE,
 } from './config.js';
-import { ContainerOutput, runContainerAgent, writeTasksSnapshot } from './container-runner.js';
+import { ContainerOutput, runContainerAgent } from './container-runner.js';
 import {
-  getAllTasks,
+  claimTask,
   getDueTasks,
-  getTaskById,
   logTaskRun,
   updateTaskAfterRun,
 } from './db.js';
 import { GroupQueue } from './group-queue.js';
+import { createIdleTimer } from './idle-timer.js';
 import { logger } from './logger.js';
+import { startPollLoop } from './poll-loop.js';
+import { refreshTasksSnapshot } from './task-snapshots.js';
 import { RegisteredGroup, ScheduledTask } from './types.js';
 
 export interface SchedulerDependencies {
@@ -61,25 +63,15 @@ async function runTask(
       result: null,
       error: `Group not found: ${task.group_folder}`,
     });
+    // Restore next_run so the task can be retried
+    updateTaskAfterRun(task.id, task.next_run, `Error: Group not found: ${task.group_folder}`);
     return;
   }
 
-  // Update tasks snapshot for container to read (filtered by group)
   const isMain = task.group_folder === MAIN_GROUP_FOLDER;
-  const tasks = getAllTasks();
-  writeTasksSnapshot(
-    task.group_folder,
-    isMain,
-    tasks.map((t) => ({
-      id: t.id,
-      groupFolder: t.group_folder,
-      prompt: t.prompt,
-      schedule_type: t.schedule_type,
-      schedule_value: t.schedule_value,
-      status: t.status,
-      next_run: t.next_run,
-    })),
-  );
+
+  // Update tasks snapshot for container to read (filtered by group)
+  refreshTasksSnapshot(task.group_folder, isMain);
 
   let result: string | null = null;
   let error: string | null = null;
@@ -89,17 +81,12 @@ async function runTask(
   const sessionId =
     task.context_mode === 'group' ? sessions[task.group_folder] : undefined;
 
-  // Idle timer: writes _close sentinel after IDLE_TIMEOUT of no output,
+  // Idle timer: closes container stdin after IDLE_TIMEOUT of no output,
   // so the container exits instead of hanging at waitForIpcMessage forever.
-  let idleTimer: ReturnType<typeof setTimeout> | null = null;
-
-  const resetIdleTimer = () => {
-    if (idleTimer) clearTimeout(idleTimer);
-    idleTimer = setTimeout(() => {
-      logger.debug({ taskId: task.id }, 'Scheduled task idle timeout, closing container stdin');
-      deps.queue.closeStdin(task.chat_jid);
-    }, IDLE_TIMEOUT);
-  };
+  const idle = createIdleTimer(() => {
+    logger.debug({ taskId: task.id }, 'Scheduled task idle timeout, closing container stdin');
+    deps.queue.closeStdin(task.chat_jid);
+  }, IDLE_TIMEOUT);
 
   try {
     const output = await runContainerAgent(
@@ -119,7 +106,7 @@ async function runTask(
           // Forward result to user (sendMessage handles formatting)
           await deps.sendMessage(task.chat_jid, streamedOutput.result);
           // Only reset idle timer on actual results, not session-update markers
-          resetIdleTimer();
+          idle.reset();
         }
         if (streamedOutput.status === 'error') {
           error = streamedOutput.error || 'Unknown error';
@@ -127,7 +114,7 @@ async function runTask(
       },
     );
 
-    if (idleTimer) clearTimeout(idleTimer);
+    idle.clear();
 
     if (output.status === 'error') {
       error = output.error || 'Unknown error';
@@ -141,7 +128,7 @@ async function runTask(
       'Task completed',
     );
   } catch (err) {
-    if (idleTimer) clearTimeout(idleTimer);
+    idle.clear();
     error = err instanceof Error ? err.message : String(err);
     logger.error({ taskId: task.id, error }, 'Task failed');
   }
@@ -177,42 +164,25 @@ async function runTask(
   updateTaskAfterRun(task.id, nextRun, resultSummary);
 }
 
-let schedulerRunning = false;
-
-export function startSchedulerLoop(deps: SchedulerDependencies): void {
-  if (schedulerRunning) {
-    logger.debug('Scheduler loop already running, skipping duplicate start');
-    return;
-  }
-  schedulerRunning = true;
-  logger.info('Scheduler loop started');
-
-  const loop = async () => {
-    try {
-      const dueTasks = getDueTasks();
-      if (dueTasks.length > 0) {
-        logger.info({ count: dueTasks.length }, 'Found due tasks');
-      }
-
-      for (const task of dueTasks) {
-        // Re-check task status in case it was paused/cancelled
-        const currentTask = getTaskById(task.id);
-        if (!currentTask || currentTask.status !== 'active') {
-          continue;
-        }
-
-        deps.queue.enqueueTask(
-          currentTask.chat_jid,
-          currentTask.id,
-          () => runTask(currentTask, deps),
-        );
-      }
-    } catch (err) {
-      logger.error({ err }, 'Error in scheduler loop');
+export function startSchedulerLoop(deps: SchedulerDependencies): { stop: () => void } {
+  return startPollLoop('Scheduler', SCHEDULER_POLL_INTERVAL, async () => {
+    const dueTasks = getDueTasks();
+    if (dueTasks.length > 0) {
+      logger.info({ count: dueTasks.length }, 'Found due tasks');
     }
 
-    setTimeout(loop, SCHEDULER_POLL_INTERVAL);
-  };
+    for (const task of dueTasks) {
+      // Atomically claim the task by nullifying next_run.
+      // Prevents duplicate execution if the task runs longer than the poll interval.
+      if (!claimTask(task.id)) {
+        continue;
+      }
 
-  loop();
+      deps.queue.enqueueTask(
+        task.chat_jid,
+        task.id,
+        () => runTask(task, deps),
+      );
+    }
+  });
 }

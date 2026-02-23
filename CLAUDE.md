@@ -1,6 +1,6 @@
 # G2
 
-Personal Claude assistant. See [README.md](README.md) for philosophy and setup. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for system architecture. See [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) for architecture decisions.
+Personal Claude assistant. See [README.md](README.md) for philosophy and setup. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for system architecture. See [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) for architecture decisions. See [docs/HEARTBEAT.md](docs/HEARTBEAT.md) for the polling loops and task scheduler.
 
 ## Quick Context
 
@@ -34,11 +34,17 @@ Single Node.js process that connects to WhatsApp, routes messages to Claude Agen
 | `src/group-queue.ts` | Per-group queue with global concurrency limit |
 | `src/task-scheduler.ts` | Runs scheduled tasks |
 | `src/session-manager.ts` | Claude Agent SDK session management per group |
+| `src/poll-loop.ts` | Shared polling loop abstraction |
+| `src/idle-timer.ts` | Shared idle timer utility |
+| `src/ipc-transport.ts` | File-based IPC write operations |
+| `src/task-snapshots.ts` | Task snapshot writing for containers |
 
 ### IPC Handlers (`src/ipc-handlers/`)
 | File | Purpose |
 |------|---------|
-| `src/ipc.ts` | IPC watcher and task processing |
+| `src/ipc.ts` | IPC watcher (fs.watch + fallback poll) and task processing |
+| `src/ipc-handlers/index.ts` | Exports all handlers |
+| `src/ipc-handlers/types.ts` | `IpcCommandHandler` interface |
 | `src/ipc-handlers/dispatcher.ts` | Routes IPC commands to handlers |
 | `src/ipc-handlers/schedule-task.ts` | Handle `schedule_task` IPC command |
 | `src/ipc-handlers/register-group.ts` | Handle `register_group` IPC command |
@@ -55,6 +61,7 @@ Single Node.js process that connects to WhatsApp, routes messages to Claude Agen
 ### Interfaces (`src/interfaces/`)
 | File | Purpose |
 |------|---------|
+| `src/interfaces/index.ts` | Exports all interfaces and implementations |
 | `src/interfaces/container-runtime.ts` | `IContainerRuntime` interface |
 | `src/interfaces/docker-runtime.ts` | Docker implementation of `IContainerRuntime` |
 | `src/interfaces/mount-factory.ts` | `IMountFactory` interface |
@@ -74,6 +81,7 @@ Single Node.js process that connects to WhatsApp, routes messages to Claude Agen
 ### Other
 | File | Purpose |
 |------|---------|
+| `src/whatsapp-auth.ts` | Standalone WhatsApp authentication |
 | `groups/{name}/CLAUDE.md` | Per-group memory (isolated) |
 | `container/skills/agent-browser/SKILL.md` | Browser automation skill (available to all agents) |
 
