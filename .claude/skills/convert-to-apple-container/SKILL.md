@@ -16,7 +16,7 @@ This skill switches G2's container runtime from Docker to Apple Container (macOS
 
 **What stays the same:**
 - Dockerfile (shared by both runtimes)
-- Container runner code (`src/container-runner.ts`)
+- Container runner code (`src/execution/ContainerRunner.ts`)
 - Mount security/allowlist validation
 - All other functionality
 
@@ -44,7 +44,7 @@ Read `.g2/state.yaml`. If `convert-to-apple-container` is in `applied_skills`, s
 ### Check current runtime
 
 ```bash
-grep "CONTAINER_RUNTIME_BIN" src/container-runtime.ts
+grep "CONTAINER_RUNTIME_BIN" src/execution/ContainerRuntime.ts
 ```
 
 If it already shows `'container'`, the runtime is already Apple Container. Skip to Phase 3.
@@ -70,13 +70,13 @@ npx tsx scripts/apply-skill.ts .claude/skills/convert-to-apple-container
 ```
 
 This deterministically:
-- Replaces `src/container-runtime.ts` with the Apple Container implementation
-- Replaces `src/container-runtime.test.ts` with Apple Container-specific tests
+- Replaces `src/execution/ContainerRuntime.ts` with the Apple Container implementation
+- Replaces `src/execution/ContainerRuntime.test.ts` with Apple Container-specific tests
 - Updates `container/build.sh` to default to `container` runtime
 - Records the application in `.g2/state.yaml`
 
 If the apply reports merge conflicts, read the intent files:
-- `modify/src/container-runtime.ts.intent.md` — what changed and invariants
+- `modify/src/execution/ContainerRuntime.ts.intent.md` — what changed and invariants
 - `modify/container/build.sh.intent.md` — what changed for build script
 
 ### Validate code changes
@@ -170,6 +170,6 @@ Check directory permissions on the host. The container runs as uid 1000.
 
 | File | Type of Change |
 |------|----------------|
-| `src/container-runtime.ts` | Full replacement — Docker → Apple Container API |
-| `src/container-runtime.test.ts` | Full replacement — tests for Apple Container behavior |
+| `src/execution/ContainerRuntime.ts` | Full replacement — DockerRuntime class → AppleContainerRuntime class (re-exported as DockerRuntime) |
+| `src/execution/ContainerRuntime.test.ts` | Full replacement — tests for AppleContainerRuntime class |
 | `container/build.sh` | Default runtime: `docker` → `container` |

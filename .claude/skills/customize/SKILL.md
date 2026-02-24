@@ -18,13 +18,14 @@ This skill helps users add capabilities or modify behavior. Use AskUserQuestion 
 
 | File | Purpose |
 |------|---------|
-| `src/index.ts` | Orchestrator: state, message loop, agent invocation |
-| `src/channels/whatsapp.ts` | WhatsApp connection, auth, send/receive |
-| `src/ipc.ts` | IPC watcher and task processing |
-| `src/router.ts` | Message formatting and outbound routing |
+| `src/index.ts` | Entry point: channel setup, `main()` bootstrap |
+| `src/app.ts` | Orchestrator class: composes services, wires subsystems |
+| `src/messaging/whatsapp/WhatsAppChannel.ts` | WhatsApp connection, auth, send/receive |
+| `src/ipc/IpcWatcher.ts` | IPC watcher (fs.watch + fallback poll) |
+| `src/ipc/IpcDispatcher.ts` | Routes IPC commands to handlers |
 | `src/types.ts` | TypeScript interfaces (includes Channel) |
-| `src/config.ts` | Assistant name, trigger pattern, directories |
-| `src/db.ts` | Database initialization and queries |
+| `src/infrastructure/Config.ts` | Assistant name, trigger pattern, directories |
+| `src/infrastructure/Database.ts` | Database initialization and queries |
 | `src/whatsapp-auth.ts` | Standalone WhatsApp authentication script |
 | `groups/CLAUDE.md` | Global memory/persona |
 
@@ -39,7 +40,7 @@ Questions to ask:
 - Should messages from this channel go to existing groups or new ones?
 
 Implementation pattern:
-1. Create `src/channels/{name}.ts` implementing the `Channel` interface from `src/types.ts` (see `src/channels/whatsapp.ts` for reference)
+1. Create `src/messaging/{name}/{Name}Channel.ts` implementing the `Channel` interface from `src/types.ts` (see `src/messaging/whatsapp/WhatsAppChannel.ts` for reference)
 2. Add the channel instance to `main()` in `src/index.ts` and wire callbacks (`onMessage`, `onChatMetadata`)
 3. Messages are stored via the `onMessage` callback; routing is automatic via `ownsJid()`
 
@@ -51,7 +52,7 @@ Questions to ask:
 - Which groups should have access?
 
 Implementation:
-1. Add MCP server config to the container settings (see `src/container-runner.ts` for how MCP servers are mounted)
+1. Add MCP server config to the container settings (see `src/execution/ContainerRunner.ts` for how MCP servers are mounted)
 2. Document available tools in `groups/CLAUDE.md`
 
 ### Changing Assistant Behavior
@@ -60,7 +61,7 @@ Questions to ask:
 - What aspect? (name, trigger, persona, response style)
 - Apply to all groups or specific ones?
 
-Simple changes → edit `src/config.ts`
+Simple changes → edit `src/infrastructure/Config.ts`
 Persona changes → edit `groups/CLAUDE.md`
 Per-group behavior → edit specific group's `CLAUDE.md`
 
@@ -102,6 +103,6 @@ User: "Add Telegram as an input channel"
 
 1. Ask: "Should Telegram use the same @G2 trigger, or a different one?"
 2. Ask: "Should Telegram messages create separate conversation contexts, or share with WhatsApp groups?"
-3. Create `src/channels/telegram.ts` implementing the `Channel` interface (see `src/channels/whatsapp.ts`)
+3. Create `src/messaging/telegram/TelegramChannel.ts` implementing the `Channel` interface (see `src/messaging/whatsapp/WhatsAppChannel.ts`)
 4. Add the channel to `main()` in `src/index.ts`
 5. Tell user how to authenticate and test

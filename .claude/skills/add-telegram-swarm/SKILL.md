@@ -7,7 +7,7 @@ description: Add Agent Swarm (Teams) support to Telegram. Each subagent gets its
 
 This skill adds Agent Teams (Swarm) support to an existing Telegram channel. Each subagent in a team gets its own bot identity in the Telegram group, so users can visually distinguish which agent is speaking.
 
-**Prerequisite**: Telegram must already be set up via the `/add-telegram` skill. If `src/telegram.ts` does not exist or `TELEGRAM_BOT_TOKEN` is not configured, tell the user to run `/add-telegram` first.
+**Prerequisite**: Telegram must already be set up via the `/add-telegram` skill. If `src/messaging/telegram/TelegramChannel.ts` does not exist or `TELEGRAM_BOT_TOKEN` is not configured, tell the user to run `/add-telegram` first.
 
 ## How It Works
 
@@ -59,7 +59,7 @@ Tell the user:
 
 ### Step 1: Update Configuration
 
-Read `src/config.ts` and add the bot pool config near the other Telegram exports:
+Read `src/infrastructure/Config.ts` and add the bot pool config near the other Telegram exports:
 
 ```typescript
 export const TELEGRAM_BOT_POOL = (process.env.TELEGRAM_BOT_POOL || '')
@@ -70,7 +70,7 @@ export const TELEGRAM_BOT_POOL = (process.env.TELEGRAM_BOT_POOL || '')
 
 ### Step 2: Add Bot Pool to Telegram Module
 
-Read `src/telegram.ts` and add the following:
+Read `src/messaging/telegram/TelegramChannel.ts` and add the following:
 
 1. **Update imports** — add `Api` to the Grammy import:
 
@@ -204,11 +204,11 @@ async (args) => {
 
 ### Step 4: Update Host IPC Routing
 
-Read `src/ipc.ts` and make these changes:
+Read `src/ipc/IpcWatcher.ts` (or `src/ipc/IpcDispatcher.ts`) and make these changes:
 
 1. **Add imports** — add `sendPoolMessage` and `initBotPool` from the Telegram swarm module, and `TELEGRAM_BOT_POOL` from config.
 
-2. **Update IPC message routing** — in `src/ipc.ts`, find where the `sendMessage` dependency is called to deliver IPC messages (inside `processIpcFiles`). The `sendMessage` is passed in via the `IpcDeps` parameter. Wrap it to route Telegram swarm messages through the bot pool:
+2. **Update IPC message routing** — in the IPC dispatcher, find where the `sendMessage` dependency is called to deliver IPC messages (inside `processIpcFiles`). The `sendMessage` is passed in via the `IpcDeps` parameter. Wrap it to route Telegram swarm messages through the bot pool:
 
 ```typescript
 if (data.sender && data.chatJid.startsWith('tg:')) {
@@ -371,9 +371,9 @@ Check the group's `CLAUDE.md` has the Agent Teams instructions. The lead agent r
 
 To remove Agent Swarm support while keeping basic Telegram:
 
-1. Remove `TELEGRAM_BOT_POOL` from `src/config.ts`
-2. Remove pool code from `src/telegram.ts` (`poolApis`, `senderBotMap`, `initBotPool`, `sendPoolMessage`)
-3. Remove pool routing from IPC handler in `src/index.ts` (revert to plain `sendMessage`)
+1. Remove `TELEGRAM_BOT_POOL` from `src/infrastructure/Config.ts`
+2. Remove pool code from `src/messaging/telegram/TelegramChannel.ts` (`poolApis`, `senderBotMap`, `initBotPool`, `sendPoolMessage`)
+3. Remove pool routing from IPC handler in `src/ipc/IpcDispatcher.ts` (revert to plain `sendMessage`)
 4. Remove `initBotPool` call from `main()`
 5. Remove `sender` param from MCP tool in `container/agent-runner/src/ipc-mcp-stdio.ts`
 6. Remove Agent Teams section from group CLAUDE.md files

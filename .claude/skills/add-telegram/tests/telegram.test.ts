@@ -11,12 +11,12 @@ describe('telegram skill package', () => {
 
     const content = fs.readFileSync(manifestPath, 'utf-8');
     expect(content).toContain('skill: telegram');
-    expect(content).toContain('version: 1.0.0');
+    expect(content).toContain('version: 2.0.0');
     expect(content).toContain('grammy');
   });
 
   it('has all files declared in adds', () => {
-    const addFile = path.join(skillDir, 'add', 'src', 'channels', 'telegram.ts');
+    const addFile = path.join(skillDir, 'add', 'src', 'messaging', 'telegram', 'TelegramChannel.ts');
     expect(fs.existsSync(addFile)).toBe(true);
 
     const content = fs.readFileSync(addFile, 'utf-8');
@@ -24,7 +24,7 @@ describe('telegram skill package', () => {
     expect(content).toContain('implements Channel');
 
     // Test file for the channel
-    const testFile = path.join(skillDir, 'add', 'src', 'channels', 'telegram.test.ts');
+    const testFile = path.join(skillDir, 'add', 'src', 'messaging', 'telegram', 'TelegramChannel.test.ts');
     expect(fs.existsSync(testFile)).toBe(true);
 
     const testContent = fs.readFileSync(testFile, 'utf-8');
@@ -33,7 +33,7 @@ describe('telegram skill package', () => {
 
   it('has all files declared in modifies', () => {
     const indexFile = path.join(skillDir, 'modify', 'src', 'index.ts');
-    const configFile = path.join(skillDir, 'modify', 'src', 'config.ts');
+    const configFile = path.join(skillDir, 'modify', 'src', 'infrastructure', 'Config.ts');
     const routingTestFile = path.join(skillDir, 'modify', 'src', 'routing.test.ts');
 
     expect(fs.existsSync(indexFile)).toBe(true);
@@ -44,8 +44,7 @@ describe('telegram skill package', () => {
     expect(indexContent).toContain('TelegramChannel');
     expect(indexContent).toContain('TELEGRAM_BOT_TOKEN');
     expect(indexContent).toContain('TELEGRAM_ONLY');
-    expect(indexContent).toContain('findChannel');
-    expect(indexContent).toContain('channels: Channel[]');
+    expect(indexContent).toContain('orchestrator.addChannel');
 
     const configContent = fs.readFileSync(configFile, 'utf-8');
     expect(configContent).toContain('TELEGRAM_BOT_TOKEN');
@@ -54,7 +53,7 @@ describe('telegram skill package', () => {
 
   it('has intent files for modified files', () => {
     expect(fs.existsSync(path.join(skillDir, 'modify', 'src', 'index.ts.intent.md'))).toBe(true);
-    expect(fs.existsSync(path.join(skillDir, 'modify', 'src', 'config.ts.intent.md'))).toBe(true);
+    expect(fs.existsSync(path.join(skillDir, 'modify', 'src', 'infrastructure', 'Config.ts.intent.md'))).toBe(true);
   });
 
   it('modified index.ts preserves core structure', () => {
@@ -63,16 +62,11 @@ describe('telegram skill package', () => {
       'utf-8',
     );
 
-    // Core functions still present
-    expect(content).toContain('function loadState()');
-    expect(content).toContain('function saveState()');
-    expect(content).toContain('function registerGroup(');
+    // Core DDD imports and structure
+    expect(content).toContain("from './app.js'");
+    expect(content).toContain("from './infrastructure/Database.js'");
+    expect(content).toContain("from './infrastructure/Logger.js'");
     expect(content).toContain('function getAvailableGroups()');
-    expect(content).toContain('function processGroupMessages(');
-    expect(content).toContain('function runAgent(');
-    expect(content).toContain('function startMessageLoop()');
-    expect(content).toContain('function recoverPendingMessages()');
-    expect(content).toContain('function ensureContainerSystemRunning()');
     expect(content).toContain('async function main()');
 
     // Test helper preserved
@@ -88,22 +82,22 @@ describe('telegram skill package', () => {
       'utf-8',
     );
 
-    // Multi-channel architecture
-    expect(content).toContain('const channels: Channel[] = []');
-    expect(content).toContain('channels.push(whatsapp)');
-    expect(content).toContain('channels.push(telegram)');
+    // Telegram imports with DDD paths
+    expect(content).toContain("from './messaging/telegram/TelegramChannel.js'");
+    expect(content).toContain("from './infrastructure/Config.js'");
 
     // Conditional channel creation
     expect(content).toContain('if (!TELEGRAM_ONLY)');
     expect(content).toContain('if (TELEGRAM_BOT_TOKEN)');
 
-    // Shutdown disconnects all channels
-    expect(content).toContain('for (const ch of channels) await ch.disconnect()');
+    // DDD database pattern
+    expect(content).toContain('database.messageRepo.storeMessage');
+    expect(content).toContain('database.chatRepo.storeChatMetadata');
   });
 
   it('modified config.ts preserves all existing exports', () => {
     const content = fs.readFileSync(
-      path.join(skillDir, 'modify', 'src', 'config.ts'),
+      path.join(skillDir, 'modify', 'src', 'infrastructure', 'Config.ts'),
       'utf-8',
     );
 

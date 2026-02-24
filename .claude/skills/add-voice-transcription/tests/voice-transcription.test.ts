@@ -11,13 +11,13 @@ describe('voice-transcription skill package', () => {
 
     const content = fs.readFileSync(manifestPath, 'utf-8');
     expect(content).toContain('skill: voice-transcription');
-    expect(content).toContain('version: 1.0.0');
+    expect(content).toContain('version: 2.0.0');
     expect(content).toContain('openai');
     expect(content).toContain('OPENAI_API_KEY');
   });
 
   it('has all files declared in adds', () => {
-    const transcriptionFile = path.join(skillDir, 'add', 'src', 'transcription.ts');
+    const transcriptionFile = path.join(skillDir, 'add', 'src', 'messaging', 'whatsapp', 'Transcription.ts');
     expect(fs.existsSync(transcriptionFile)).toBe(true);
 
     const content = fs.readFileSync(transcriptionFile, 'utf-8');
@@ -29,21 +29,21 @@ describe('voice-transcription skill package', () => {
   });
 
   it('has all files declared in modifies', () => {
-    const whatsappFile = path.join(skillDir, 'modify', 'src', 'channels', 'whatsapp.ts');
-    const whatsappTestFile = path.join(skillDir, 'modify', 'src', 'channels', 'whatsapp.test.ts');
+    const whatsappFile = path.join(skillDir, 'modify', 'src', 'messaging', 'whatsapp', 'WhatsAppChannel.ts');
+    const whatsappTestFile = path.join(skillDir, 'modify', 'src', 'messaging', 'whatsapp', 'WhatsAppChannel.test.ts');
 
     expect(fs.existsSync(whatsappFile)).toBe(true);
     expect(fs.existsSync(whatsappTestFile)).toBe(true);
   });
 
   it('has intent files for modified files', () => {
-    expect(fs.existsSync(path.join(skillDir, 'modify', 'src', 'channels', 'whatsapp.ts.intent.md'))).toBe(true);
-    expect(fs.existsSync(path.join(skillDir, 'modify', 'src', 'channels', 'whatsapp.test.ts.intent.md'))).toBe(true);
+    expect(fs.existsSync(path.join(skillDir, 'modify', 'src', 'messaging', 'whatsapp', 'WhatsAppChannel.ts.intent.md'))).toBe(true);
+    expect(fs.existsSync(path.join(skillDir, 'modify', 'src', 'messaging', 'whatsapp', 'WhatsAppChannel.test.ts.intent.md'))).toBe(true);
   });
 
   it('modified whatsapp.ts preserves core structure', () => {
     const content = fs.readFileSync(
-      path.join(skillDir, 'modify', 'src', 'channels', 'whatsapp.ts'),
+      path.join(skillDir, 'modify', 'src', 'messaging', 'whatsapp', 'WhatsAppChannel.ts'),
       'utf-8',
     );
 
@@ -56,7 +56,7 @@ describe('voice-transcription skill package', () => {
     expect(content).toContain('ownsJid(');
     expect(content).toContain('async disconnect()');
     expect(content).toContain('async setTyping(');
-    expect(content).toContain('async syncGroupMetadata(');
+    expect(content).toContain('async syncMetadata(');
     expect(content).toContain('private async translateJid(');
     expect(content).toContain('private async flushOutgoingQueue(');
 
@@ -68,12 +68,12 @@ describe('voice-transcription skill package', () => {
 
   it('modified whatsapp.ts includes transcription integration', () => {
     const content = fs.readFileSync(
-      path.join(skillDir, 'modify', 'src', 'channels', 'whatsapp.ts'),
+      path.join(skillDir, 'modify', 'src', 'messaging', 'whatsapp', 'WhatsAppChannel.ts'),
       'utf-8',
     );
 
     // Transcription imports
-    expect(content).toContain("import { isVoiceMessage, transcribeAudioMessage } from '../transcription.js'");
+    expect(content).toContain("import { isVoiceMessage, transcribeAudioMessage } from './Transcription.js'");
 
     // Voice message handling
     expect(content).toContain('isVoiceMessage(msg)');
@@ -86,12 +86,12 @@ describe('voice-transcription skill package', () => {
 
   it('modified whatsapp.test.ts includes transcription mock and tests', () => {
     const content = fs.readFileSync(
-      path.join(skillDir, 'modify', 'src', 'channels', 'whatsapp.test.ts'),
+      path.join(skillDir, 'modify', 'src', 'messaging', 'whatsapp', 'WhatsAppChannel.test.ts'),
       'utf-8',
     );
 
     // Transcription mock
-    expect(content).toContain("vi.mock('../transcription.js'");
+    expect(content).toContain("vi.mock('./Transcription.js'");
     expect(content).toContain('isVoiceMessage');
     expect(content).toContain('transcribeAudioMessage');
 
@@ -104,7 +104,7 @@ describe('voice-transcription skill package', () => {
 
   it('modified whatsapp.test.ts preserves all existing test sections', () => {
     const content = fs.readFileSync(
-      path.join(skillDir, 'modify', 'src', 'channels', 'whatsapp.test.ts'),
+      path.join(skillDir, 'modify', 'src', 'messaging', 'whatsapp', 'WhatsAppChannel.test.ts'),
       'utf-8',
     );
 

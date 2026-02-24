@@ -1,13 +1,13 @@
 skill: convert-to-apple-container
-version: 1.0.0
+version: 2.0.0
 description: "Switch container runtime from Docker to Apple Container (macOS)"
 core_version: 0.1.0
 adds: []
 modifies:
-  - src/container-runtime.ts
-  - src/container-runtime.test.ts
+  - src/execution/ContainerRuntime.ts
+  - src/execution/ContainerRuntime.test.ts
   - container/build.sh
 structured: {}
 conflicts: []
 depends: []
-test: "npx vitest run src/container-runtime.test.ts"
+test: "npx vitest run src/execution/ContainerRuntime.test.ts"

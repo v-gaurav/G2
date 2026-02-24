@@ -36,16 +36,16 @@ npx tsx scripts/apply-skill.ts .claude/skills/add-voice-transcription
 ```
 
 This deterministically:
-- Adds `src/transcription.ts` (voice transcription module using OpenAI Whisper)
-- Three-way merges voice handling into `src/channels/whatsapp.ts` (isVoiceMessage check, transcribeAudioMessage call)
-- Three-way merges transcription tests into `src/channels/whatsapp.test.ts` (mock + 3 test cases)
+- Adds `src/messaging/whatsapp/Transcription.ts` (voice transcription module using OpenAI Whisper)
+- Three-way merges voice handling into `src/messaging/whatsapp/WhatsAppChannel.ts` (isVoiceMessage check, transcribeAudioMessage call)
+- Three-way merges transcription tests into `src/messaging/whatsapp/WhatsAppChannel.test.ts` (mock + 3 test cases)
 - Installs the `openai` npm dependency
 - Updates `.env.example` with `OPENAI_API_KEY`
 - Records the application in `.g2/state.yaml`
 
 If the apply reports merge conflicts, read the intent files:
-- `modify/src/channels/whatsapp.ts.intent.md` — what changed and invariants for whatsapp.ts
-- `modify/src/channels/whatsapp.test.ts.intent.md` — what changed for whatsapp.test.ts
+- `modify/src/messaging/whatsapp/WhatsAppChannel.ts.intent.md` — what changed and invariants for WhatsAppChannel.ts
+- `modify/src/messaging/whatsapp/WhatsAppChannel.test.ts.intent.md` — what changed for WhatsAppChannel.test.ts
 
 ### Validate code changes
 

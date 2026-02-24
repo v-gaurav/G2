@@ -20,7 +20,7 @@ find src -name '*.ts' ! -name '*.test.ts' | sort
 
 For each file, note:
 - Exported classes, interfaces, functions, constants (read the file)
-- Which directory it's in (`src/`, `src/channels/`, `src/interfaces/`, `src/ipc-handlers/`, etc.)
+- Which directory it's in (`src/`, `src/infrastructure/`, `src/messaging/`, `src/execution/`, `src/sessions/`, `src/scheduling/`, `src/groups/`, `src/ipc/`, etc.)
 
 ### Container files
 
@@ -50,9 +50,9 @@ Read every documentation file that references codebase structure:
 | `CLAUDE.md` | Key Files tables — every non-test `src/` file should appear |
 | `README.md` | Architecture "Key files" list, philosophy language |
 | `docs/ARCHITECTURE.md` | Layer descriptions, mount tables, IPC commands, SQLite tables, startup sequence — must match actual source |
-| `docs/CHANNEL-MANAGEMENT.md` | Channel interface, registry, JID routing, WhatsApp implementation, message queue, metadata sync, inbound/outbound flow, database schema — must match `src/types.ts`, `src/channel-registry.ts`, `src/channels/whatsapp.ts`, `src/channels/outgoing-message-queue.ts`, `src/channels/whatsapp-metadata-sync.ts`, `src/router.ts`, `src/authorization.ts`, `src/db.ts`, `src/config.ts`, `src/index.ts` |
-| `docs/HEARTBEAT.md` | Polling loop intervals, timing constants, scheduler flow, GroupQueue behavior, idle timer, IPC watcher mechanism — must match `src/config.ts`, `src/task-scheduler.ts`, `src/ipc.ts`, `src/group-queue.ts`, `src/poll-loop.ts`, `src/idle-timer.ts`, `src/ipc-transport.ts`, `src/task-snapshots.ts` |
-| `docs/MEMORY.md` | Session management flow, archive/restore lifecycle, IPC handlers for sessions, DB schema — must match `src/session-manager.ts`, `src/db.ts`, `src/ipc-handlers/clear-session.ts`, `src/ipc-handlers/resume-session.ts`, `src/ipc-handlers/search-sessions.ts`, `src/ipc-handlers/archive-session.ts` |
+| `docs/CHANNEL-MANAGEMENT.md` | Channel interface, registry, JID routing, WhatsApp implementation, message queue, metadata sync, inbound/outbound flow, database schema — must match `src/messaging/types.ts`, `src/messaging/ChannelRegistry.ts`, `src/messaging/whatsapp/WhatsAppChannel.ts`, `src/messaging/whatsapp/OutgoingMessageQueue.ts`, `src/messaging/whatsapp/MetadataSync.ts`, `src/messaging/MessageFormatter.ts`, `src/groups/Authorization.ts`, `src/infrastructure/Database.ts`, `src/infrastructure/Config.ts`, `src/index.ts` |
+| `docs/HEARTBEAT.md` | Polling loop intervals, timing constants, scheduler flow, ExecutionQueue behavior, idle timer, IPC watcher mechanism — must match `src/infrastructure/Config.ts`, `src/scheduling/TaskScheduler.ts`, `src/ipc/IpcWatcher.ts`, `src/execution/ExecutionQueue.ts`, `src/infrastructure/poll-loop.ts`, `src/infrastructure/idle-timer.ts`, `src/ipc/IpcTransport.ts`, `src/scheduling/SnapshotWriter.ts` |
+| `docs/MEMORY.md` | Session management flow, archive/restore lifecycle, IPC handlers for sessions, DB schema — must match `src/sessions/SessionManager.ts`, `src/infrastructure/Database.ts`, `src/ipc/handlers/SessionHandlers.ts` |
 | `docs/SPEC.md` | Folder Structure tree — must mirror actual `src/` layout |
 | `docs/REQUIREMENTS.md` | Design Patterns section — must name actual interfaces, classes, modules |
 | `.claude/skills/*/modify/*.intent.md` | File paths in intent headers must still exist |
@@ -74,8 +74,8 @@ Compare the `find src` output against what's listed in:
 
 Also check domain-specific docs reference the correct source files:
 - `docs/HEARTBEAT.md` — polling loop, scheduler, queue, IPC, and utility files
-- `docs/MEMORY.md` — session manager, archive handlers, DB functions
-- `docs/CHANNEL-MANAGEMENT.md` — channel interface, registry, WhatsApp channel, message queue, metadata sync, router, authorization, DB schema
+- `docs/MEMORY.md` — session manager, session handlers, DB functions
+- `docs/CHANNEL-MANAGEMENT.md` — channel interface, registry, WhatsApp channel, message queue, metadata sync, message formatter, authorization, DB schema
 
 Every non-test `.ts` file in `src/` should appear in both. If a file is missing from the docs, add it with an accurate description based on reading its exports.
 
@@ -89,7 +89,7 @@ For files that exist in both the codebase and docs, verify the description is st
 
 ### 3d. Missing directories
 
-If new directories were added under `src/` (e.g., `src/interfaces/`, `src/ipc-handlers/`), they need:
+If new directories were added under `src/` (e.g., `src/infrastructure/`, `src/messaging/`, `src/execution/`, `src/sessions/`, `src/scheduling/`, `src/groups/`, `src/ipc/`), they need:
 - A section in `CLAUDE.md` Key Files
 - Coverage in the appropriate layer in `docs/ARCHITECTURE.md`
 - A directory entry in `docs/SPEC.md` Folder Structure
@@ -132,13 +132,13 @@ find container/skills -type f | sort
 
 For each issue found, make the edit directly. Follow these rules:
 
-- **CLAUDE.md**: Organize Key Files into categorized tables by directory (Core, Channels & Routing, Container & Execution, IPC Handlers, Interfaces, Security & Validation, Other). Every non-test source file gets a row.
-- **README.md**: The Architecture "Key files" list should be a curated summary (not exhaustive) — list the most important files plus directory-level entries for `src/interfaces/` and `src/ipc-handlers/`.
-- **docs/ARCHITECTURE.md**: Layer descriptions must reference actual source files. Mount tables must match `DefaultMountFactory` logic. IPC command table must match handlers in `src/ipc-handlers/`. SQLite table list must match `src/db.ts` schema. Authorization matrix must match `src/authorization.ts`. Startup sequence must match `main()` in `src/index.ts`. Config values (intervals, timeouts, concurrency limits) must match `src/config.ts`.
+- **CLAUDE.md**: Organize Key Files into categorized tables by directory (Core, Infrastructure, Messaging, Execution, Sessions, Scheduling, Groups, IPC, Other). Every non-test source file gets a row.
+- **README.md**: The Architecture "Key files" list should be a curated summary (not exhaustive) — list the most important files plus directory-level entries for bounded-context directories (`src/infrastructure/`, `src/messaging/`, `src/execution/`, `src/sessions/`, `src/scheduling/`, `src/groups/`, `src/ipc/`).
+- **docs/ARCHITECTURE.md**: Layer descriptions must reference actual source files. Mount tables must match `DefaultMountFactory` logic. IPC command table must match handlers in `src/ipc/handlers/`. SQLite table list must match `src/infrastructure/Database.ts` schema. Authorization matrix must match `src/groups/Authorization.ts`. Startup sequence must match `main()` in `src/index.ts`. Config values (intervals, timeouts, concurrency limits) must match `src/infrastructure/Config.ts`.
 - **docs/SPEC.md**: The Folder Structure tree must show every file and directory exactly as they exist on disk.
-- **docs/HEARTBEAT.md**: Polling intervals must match `src/config.ts` constants (`POLL_INTERVAL`, `SCHEDULER_POLL_INTERVAL`, `IPC_POLL_INTERVAL`, `IDLE_TIMEOUT`, `CONTAINER_TIMEOUT`, `MAX_CONCURRENT_CONTAINERS`). Scheduler flow must match `src/task-scheduler.ts` (`startSchedulerLoop`, `runTask`, `claimTask` usage). IPC watcher mechanism must match `src/ipc.ts` (fs.watch vs polling, fallback interval). GroupQueue behavior must match `src/group-queue.ts` (enqueue/drain logic, `IpcTransport` usage, `Set` vs array for `waitingGroups`). Idle timer description must match `src/idle-timer.ts`. Task snapshot helper must match `src/task-snapshots.ts`. DB functions referenced (`getDueTasks`, `claimTask`, `updateTaskAfterRun`, `logTaskRun`) must match `src/db.ts`.
-- **docs/CHANNEL-MANAGEMENT.md**: Channel interface must match `src/types.ts` (`Channel`, `OnInboundMessage`, `OnChatMetadata`). Registry methods must match `src/channel-registry.ts`. WhatsApp implementation details (connection, reconnection, LID translation, bot detection, typing) must match `src/channels/whatsapp.ts`. Outgoing queue behavior must match `src/channels/outgoing-message-queue.ts`. Metadata sync timing and cache logic must match `src/channels/whatsapp-metadata-sync.ts`. Outbound formatting must match `src/router.ts`. Authorization matrix must match `src/authorization.ts`. Database schema must match `src/db.ts`. Config constants (`ASSISTANT_NAME`, `ASSISTANT_HAS_OWN_NUMBER`, `STORE_DIR`) must match `src/config.ts`. Initialization and shutdown sequence must match `src/index.ts`.
-- **docs/MEMORY.md**: Session management flow must match `src/session-manager.ts`. DB tables (`sessions`, `session_history`, `conversation_archives`) must match `src/db.ts` schema. Archive/restore lifecycle must match IPC handlers: `src/ipc-handlers/clear-session.ts`, `src/ipc-handlers/resume-session.ts`, `src/ipc-handlers/search-sessions.ts`, `src/ipc-handlers/archive-session.ts`, `src/ipc-handlers/archive-utils.ts`. Container-side behavior must match `container/agent-runner/src/index.ts` (PreCompact hook, session resume).
+- **docs/HEARTBEAT.md**: Polling intervals must match `src/infrastructure/Config.ts` constants (`POLL_INTERVAL`, `SCHEDULER_POLL_INTERVAL`, `IPC_POLL_INTERVAL`, `IDLE_TIMEOUT`, `CONTAINER_TIMEOUT`, `MAX_CONCURRENT_CONTAINERS`). Scheduler flow must match `src/scheduling/TaskScheduler.ts` (`startSchedulerLoop`, `runTask`, `claimTask` usage). IPC watcher mechanism must match `src/ipc/IpcWatcher.ts` (fs.watch vs polling, fallback interval). ExecutionQueue behavior must match `src/execution/ExecutionQueue.ts` (enqueue/drain logic, `IpcTransport` usage, `Set` vs array for `waitingGroups`). Idle timer description must match `src/infrastructure/idle-timer.ts`. Task snapshot helper must match `src/scheduling/SnapshotWriter.ts`. DB functions referenced (`getDueTasks`, `claimTask`, `updateTaskAfterRun`, `logTaskRun`) must match `src/infrastructure/Database.ts`.
+- **docs/CHANNEL-MANAGEMENT.md**: Channel interface must match `src/messaging/types.ts` (`Channel`, `OnInboundMessage`, `OnChatMetadata`). Registry methods must match `src/messaging/ChannelRegistry.ts`. WhatsApp implementation details (connection, reconnection, LID translation, bot detection, typing) must match `src/messaging/whatsapp/WhatsAppChannel.ts`. Outgoing queue behavior must match `src/messaging/whatsapp/OutgoingMessageQueue.ts`. Metadata sync timing and cache logic must match `src/messaging/whatsapp/MetadataSync.ts`. Outbound formatting must match `src/messaging/MessageFormatter.ts`. Authorization matrix must match `src/groups/Authorization.ts`. Database schema must match `src/infrastructure/Database.ts`. Config constants (`ASSISTANT_NAME`, `ASSISTANT_HAS_OWN_NUMBER`, `STORE_DIR`) must match `src/infrastructure/Config.ts`. Initialization and shutdown sequence must match `src/index.ts`.
+- **docs/MEMORY.md**: Session management flow must match `src/sessions/SessionManager.ts`. DB tables (`sessions`, `session_history`, `conversation_archives`) must match `src/infrastructure/Database.ts` schema. Archive/restore lifecycle must match IPC handlers in `src/ipc/handlers/SessionHandlers.ts`. Container-side behavior must match `container/agent-runner/src/index.ts` (PreCompact hook, session resume).
 - **docs/REQUIREMENTS.md**: The Design Patterns section should name actual classes/interfaces/functions. Architecture Decisions subsections should reference the modules that implement them.
 - **Language fixes**: Replace stale phrases with accurate ones. Don't overstate or understate the codebase size.
 

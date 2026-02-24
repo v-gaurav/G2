@@ -11,12 +11,12 @@ describe('discord skill package', () => {
 
     const content = fs.readFileSync(manifestPath, 'utf-8');
     expect(content).toContain('skill: discord');
-    expect(content).toContain('version: 1.0.0');
+    expect(content).toContain('version: 2.0.0');
     expect(content).toContain('discord.js');
   });
 
   it('has all files declared in adds', () => {
-    const addFile = path.join(skillDir, 'add', 'src', 'channels', 'discord.ts');
+    const addFile = path.join(skillDir, 'add', 'src', 'messaging', 'discord', 'DiscordChannel.ts');
     expect(fs.existsSync(addFile)).toBe(true);
 
     const content = fs.readFileSync(addFile, 'utf-8');
@@ -24,7 +24,7 @@ describe('discord skill package', () => {
     expect(content).toContain('implements Channel');
 
     // Test file for the channel
-    const testFile = path.join(skillDir, 'add', 'src', 'channels', 'discord.test.ts');
+    const testFile = path.join(skillDir, 'add', 'src', 'messaging', 'discord', 'DiscordChannel.test.ts');
     expect(fs.existsSync(testFile)).toBe(true);
 
     const testContent = fs.readFileSync(testFile, 'utf-8');
@@ -33,7 +33,7 @@ describe('discord skill package', () => {
 
   it('has all files declared in modifies', () => {
     const indexFile = path.join(skillDir, 'modify', 'src', 'index.ts');
-    const configFile = path.join(skillDir, 'modify', 'src', 'config.ts');
+    const configFile = path.join(skillDir, 'modify', 'src', 'infrastructure', 'Config.ts');
     const routingTestFile = path.join(skillDir, 'modify', 'src', 'routing.test.ts');
 
     expect(fs.existsSync(indexFile)).toBe(true);
@@ -44,8 +44,6 @@ describe('discord skill package', () => {
     expect(indexContent).toContain('DiscordChannel');
     expect(indexContent).toContain('DISCORD_BOT_TOKEN');
     expect(indexContent).toContain('DISCORD_ONLY');
-    expect(indexContent).toContain('findChannel');
-    expect(indexContent).toContain('channels: Channel[]');
 
     const configContent = fs.readFileSync(configFile, 'utf-8');
     expect(configContent).toContain('DISCORD_BOT_TOKEN');
@@ -54,7 +52,7 @@ describe('discord skill package', () => {
 
   it('has intent files for modified files', () => {
     expect(fs.existsSync(path.join(skillDir, 'modify', 'src', 'index.ts.intent.md'))).toBe(true);
-    expect(fs.existsSync(path.join(skillDir, 'modify', 'src', 'config.ts.intent.md'))).toBe(true);
+    expect(fs.existsSync(path.join(skillDir, 'modify', 'src', 'infrastructure', 'Config.ts.intent.md'))).toBe(true);
   });
 
   it('modified index.ts preserves core structure', () => {
@@ -63,16 +61,8 @@ describe('discord skill package', () => {
       'utf-8',
     );
 
-    // Core functions still present
-    expect(content).toContain('function loadState()');
-    expect(content).toContain('function saveState()');
-    expect(content).toContain('function registerGroup(');
+    // Core exports still present
     expect(content).toContain('function getAvailableGroups()');
-    expect(content).toContain('function processGroupMessages(');
-    expect(content).toContain('function runAgent(');
-    expect(content).toContain('function startMessageLoop()');
-    expect(content).toContain('function recoverPendingMessages()');
-    expect(content).toContain('function ensureContainerSystemRunning()');
     expect(content).toContain('async function main()');
 
     // Test helper preserved
@@ -80,6 +70,12 @@ describe('discord skill package', () => {
 
     // Direct-run guard preserved
     expect(content).toContain('isDirectRun');
+
+    // DDD imports
+    expect(content).toContain("from './app.js'");
+    expect(content).toContain("from './infrastructure/Database.js'");
+    expect(content).toContain("from './infrastructure/Logger.js'");
+    expect(content).toContain("from './messaging/whatsapp/WhatsAppChannel.js'");
   });
 
   it('modified index.ts includes Discord channel creation', () => {
@@ -88,22 +84,22 @@ describe('discord skill package', () => {
       'utf-8',
     );
 
-    // Multi-channel architecture
-    expect(content).toContain('const channels: Channel[] = []');
-    expect(content).toContain('channels.push(whatsapp)');
-    expect(content).toContain('channels.push(discord)');
+    // Discord channel import and creation
+    expect(content).toContain("from './messaging/discord/DiscordChannel.js'");
+    expect(content).toContain("from './infrastructure/Config.js'");
 
     // Conditional channel creation
     expect(content).toContain('if (!DISCORD_ONLY)');
     expect(content).toContain('if (DISCORD_BOT_TOKEN)');
 
-    // Shutdown disconnects all channels
-    expect(content).toContain('for (const ch of channels) await ch.disconnect()');
+    // Uses orchestrator.addChannel pattern
+    expect(content).toContain('orchestrator.addChannel(whatsapp)');
+    expect(content).toContain('orchestrator.addChannel(discord)');
   });
 
   it('modified config.ts preserves all existing exports', () => {
     const content = fs.readFileSync(
-      path.join(skillDir, 'modify', 'src', 'config.ts'),
+      path.join(skillDir, 'modify', 'src', 'infrastructure', 'Config.ts'),
       'utf-8',
     );
 
@@ -114,6 +110,9 @@ describe('discord skill package', () => {
     expect(content).toContain('export const CONTAINER_IMAGE');
     expect(content).toContain('export const DATA_DIR');
     expect(content).toContain('export const TIMEZONE');
+
+    // readEnvFile defined in the same file
+    expect(content).toContain('export function readEnvFile');
 
     // Discord exports added
     expect(content).toContain('export const DISCORD_BOT_TOKEN');
@@ -129,5 +128,10 @@ describe('discord skill package', () => {
     expect(content).toContain("Discord JID: starts with dc:");
     expect(content).toContain("dc:1234567890123456");
     expect(content).toContain("dc:");
+
+    // Uses DDD database pattern
+    expect(content).toContain("database._initTest()");
+    expect(content).toContain("database.chatRepo.storeChatMetadata");
+    expect(content).toContain("from './infrastructure/Database.js'");
   });
 });

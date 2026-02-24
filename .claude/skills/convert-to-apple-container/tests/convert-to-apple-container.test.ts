@@ -11,31 +11,34 @@ describe('convert-to-apple-container skill package', () => {
 
     const content = fs.readFileSync(manifestPath, 'utf-8');
     expect(content).toContain('skill: convert-to-apple-container');
-    expect(content).toContain('version: 1.0.0');
-    expect(content).toContain('container-runtime.ts');
+    expect(content).toContain('version: 2.0.0');
+    expect(content).toContain('src/execution/ContainerRuntime.ts');
     expect(content).toContain('container/build.sh');
   });
 
   it('has all modified files', () => {
-    const runtimeFile = path.join(skillDir, 'modify', 'src', 'container-runtime.ts');
+    const runtimeFile = path.join(skillDir, 'modify', 'src', 'execution', 'ContainerRuntime.ts');
     expect(fs.existsSync(runtimeFile)).toBe(true);
 
     const content = fs.readFileSync(runtimeFile, 'utf-8');
-    expect(content).toContain("CONTAINER_RUNTIME_BIN = 'container'");
+    expect(content).toContain('AppleContainerRuntime');
+    expect(content).toContain('IContainerRuntime');
+    expect(content).toContain("= 'container'");
     expect(content).toContain('system status');
     expect(content).toContain('system start');
     expect(content).toContain('ls --format json');
 
-    const testFile = path.join(skillDir, 'modify', 'src', 'container-runtime.test.ts');
+    const testFile = path.join(skillDir, 'modify', 'src', 'execution', 'ContainerRuntime.test.ts');
     expect(fs.existsSync(testFile)).toBe(true);
 
     const testContent = fs.readFileSync(testFile, 'utf-8');
     expect(testContent).toContain('system status');
     expect(testContent).toContain('--mount');
+    expect(testContent).toContain('AppleContainerRuntime');
   });
 
   it('has intent files for modified sources', () => {
-    const runtimeIntent = path.join(skillDir, 'modify', 'src', 'container-runtime.ts.intent.md');
+    const runtimeIntent = path.join(skillDir, 'modify', 'src', 'execution', 'ContainerRuntime.ts.intent.md');
     expect(fs.existsSync(runtimeIntent)).toBe(true);
 
     const buildIntent = path.join(skillDir, 'modify', 'container', 'build.sh.intent.md');
@@ -52,7 +55,7 @@ describe('convert-to-apple-container skill package', () => {
   });
 
   it('uses Apple Container API patterns (not Docker)', () => {
-    const runtimeFile = path.join(skillDir, 'modify', 'src', 'container-runtime.ts');
+    const runtimeFile = path.join(skillDir, 'modify', 'src', 'execution', 'ContainerRuntime.ts');
     const content = fs.readFileSync(runtimeFile, 'utf-8');
 
     // Apple Container patterns
@@ -63,7 +66,24 @@ describe('convert-to-apple-container skill package', () => {
 
     // Should NOT contain Docker patterns
     expect(content).not.toContain('docker info');
-    expect(content).not.toContain("'-v'");
     expect(content).not.toContain('--filter name=');
+  });
+
+  it('exports DockerRuntime as backward-compatible alias', () => {
+    const runtimeFile = path.join(skillDir, 'modify', 'src', 'execution', 'ContainerRuntime.ts');
+    const content = fs.readFileSync(runtimeFile, 'utf-8');
+
+    expect(content).toContain('AppleContainerRuntime as DockerRuntime');
+  });
+
+  it('does not have old flat-layout files', () => {
+    const oldRuntime = path.join(skillDir, 'modify', 'src', 'container-runtime.ts');
+    expect(fs.existsSync(oldRuntime)).toBe(false);
+
+    const oldTest = path.join(skillDir, 'modify', 'src', 'container-runtime.test.ts');
+    expect(fs.existsSync(oldTest)).toBe(false);
+
+    const oldIntent = path.join(skillDir, 'modify', 'src', 'container-runtime.ts.intent.md');
+    expect(fs.existsSync(oldIntent)).toBe(false);
   });
 });

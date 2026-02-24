@@ -193,7 +193,7 @@ allowedTools: [
 
 ### Step 2: Mount Gmail Credentials in Container
 
-Read `src/container-runner.ts` and find the `buildVolumeMounts` function.
+Read `src/execution/ContainerRunner.ts` and find the `buildVolumeMounts` function.
 
 Add this mount block (after the `.claude` mount is a good location):
 
@@ -335,7 +335,7 @@ export interface EmailChannelConfig {
 }
 ```
 
-Read `src/config.ts` and add this configuration (customize values based on user's earlier answers):
+Read `src/infrastructure/Config.ts` and add this configuration (customize values based on user's earlier answers):
 
 ```typescript
 export const EMAIL_CHANNEL: EmailChannelConfig = {
@@ -350,7 +350,7 @@ export const EMAIL_CHANNEL: EmailChannelConfig = {
 
 ### Step 3: Add Email State Tracking
 
-Read `src/db.ts` and add these functions for tracking processed emails:
+Read `src/infrastructure/Database.ts` and add these functions for tracking processed emails:
 
 ```typescript
 // Track processed emails to avoid duplicates
@@ -384,15 +384,15 @@ export function markEmailResponded(messageId: string): void {
 }
 ```
 
-Also find the `initDatabase()` function in `src/db.ts` and add a call to `initEmailTable()`.
+Also find the `initDatabase()` function in `src/infrastructure/Database.ts` and add a call to `initEmailTable()`.
 
 ### Step 4: Create Email Channel Module
 
 Create a new file `src/email-channel.ts` with this content:
 
 ```typescript
-import { EMAIL_CHANNEL } from './config.js';
-import { isEmailProcessed, markEmailProcessed, markEmailResponded } from './db.js';
+import { EMAIL_CHANNEL } from './infrastructure/Config.js';
+import { isEmailProcessed, markEmailProcessed, markEmailResponded } from './infrastructure/Database.js';
 import pino from 'pino';
 
 const logger = pino({
@@ -474,8 +474,8 @@ Read `src/index.ts` and add the email polling infrastructure. First, add these i
 
 ```typescript
 import { checkForNewEmails, sendEmailReply, getContextKey } from './email-channel.js';
-import { EMAIL_CHANNEL } from './config.js';
-import { isEmailProcessed, markEmailProcessed, markEmailResponded } from './db.js';
+import { EMAIL_CHANNEL } from './infrastructure/Config.js';
+import { isEmailProcessed, markEmailProcessed, markEmailResponded } from './infrastructure/Database.js';
 ```
 
 Then add the `startEmailLoop` function:
@@ -605,7 +605,7 @@ If you want the agent to be able to send emails proactively from within a sessio
 }
 ```
 
-Then add handling in `src/ipc.ts` in the `processTaskIpc` function or create a new IPC handler for email actions.
+Then add handling in `src/ipc/IpcDispatcher.ts` or create a new IPC handler in `src/ipc/handlers/` for email actions.
 
 ### Step 8: Create Email Group Memory
 
@@ -711,7 +711,7 @@ To remove Gmail entirely:
    - Delete `gmail` from `mcpServers`
    - Remove `mcp__gmail__*` from `allowedTools`
 
-2. Remove from `src/container-runner.ts`:
+2. Remove from `src/execution/ContainerRunner.ts`:
    - Delete the `~/.gmail-mcp` mount block
 
 3. Remove from `src/index.ts` (Channel Mode only):

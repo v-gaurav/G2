@@ -1,13 +1,13 @@
 skill: telegram
-version: 1.0.0
+version: 2.0.0
 description: "Telegram Bot API integration via Grammy"
 core_version: 0.1.0
 adds:
-  - src/channels/telegram.ts
-  - src/channels/telegram.test.ts
+  - src/messaging/telegram/TelegramChannel.ts
+  - src/messaging/telegram/TelegramChannel.test.ts
 modifies:
   - src/index.ts
-  - src/config.ts
+  - src/infrastructure/Config.ts
   - src/routing.test.ts
 structured:
   npm_dependencies:
@@ -17,4 +17,4 @@ structured:
     - TELEGRAM_ONLY
 conflicts: []
 depends: []
-test: "npx vitest run src/channels/telegram.test.ts"
+test: "npx vitest run src/messaging/telegram/TelegramChannel.test.ts"

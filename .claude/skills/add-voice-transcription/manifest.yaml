@@ -1,12 +1,12 @@
 skill: voice-transcription
-version: 1.0.0
+version: 2.0.0
 description: "Voice message transcription via OpenAI Whisper"
 core_version: 0.1.0
 adds:
-  - src/transcription.ts
+  - src/messaging/whatsapp/Transcription.ts
 modifies:
-  - src/channels/whatsapp.ts
-  - src/channels/whatsapp.test.ts
+  - src/messaging/whatsapp/WhatsAppChannel.ts
+  - src/messaging/whatsapp/WhatsAppChannel.test.ts
 structured:
   npm_dependencies:
     openai: "^4.77.0"
@@ -14,4 +14,4 @@ structured:
     - OPENAI_API_KEY
 conflicts: []
 depends: []
-test: "npx vitest run src/channels/whatsapp.test.ts"
+test: "npx vitest run src/messaging/whatsapp/WhatsAppChannel.test.ts"

@@ -42,10 +42,10 @@ npx tsx scripts/apply-skill.ts .claude/skills/add-telegram
 ```
 
 This deterministically:
-- Adds `src/channels/telegram.ts` (TelegramChannel class implementing Channel interface)
-- Adds `src/channels/telegram.test.ts` (46 unit tests)
+- Adds `src/messaging/telegram/TelegramChannel.ts` (TelegramChannel class implementing Channel interface)
+- Adds `src/messaging/telegram/TelegramChannel.test.ts` (46 unit tests)
 - Three-way merges Telegram support into `src/index.ts` (multi-channel support, findChannel routing)
-- Three-way merges Telegram config into `src/config.ts` (TELEGRAM_BOT_TOKEN, TELEGRAM_ONLY exports)
+- Three-way merges Telegram config into `src/infrastructure/Config.ts` (TELEGRAM_BOT_TOKEN, TELEGRAM_ONLY exports)
 - Three-way merges updated routing tests into `src/routing.test.ts`
 - Installs the `grammy` npm dependency
 - Updates `.env.example` with `TELEGRAM_BOT_TOKEN` and `TELEGRAM_ONLY`
@@ -53,7 +53,7 @@ This deterministically:
 
 If the apply reports merge conflicts, read the intent files:
 - `modify/src/index.ts.intent.md` — what changed and invariants for index.ts
-- `modify/src/config.ts.intent.md` — what changed for config.ts
+- `modify/src/infrastructure/Config.ts.intent.md` — what changed for config.ts
 
 ### Validate code changes
 

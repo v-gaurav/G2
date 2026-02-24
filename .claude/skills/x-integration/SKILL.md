@@ -118,7 +118,7 @@ Paths relative to project root:
                        ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  Host (macOS)                                               │
-│  └── src/ipc.ts → processTaskIpc()                         │
+│  └── src/ipc/IpcDispatcher.ts → processTaskIpc()             │
 │      └── host.ts → handleXIpc()                         │
 │          └── spawn subprocess → scripts/*.ts               │
 │              └── Playwright → Chrome → X Website           │
@@ -157,7 +157,7 @@ To integrate this skill into G2, make the following modifications:
 
 ---
 
-**1. Host side: `src/ipc.ts`**
+**1. Host side: `src/ipc/IpcDispatcher.ts`**
 
 Add import after other local imports:
 ```typescript

@@ -37,10 +37,10 @@ npx tsx scripts/apply-skill.ts .claude/skills/add-discord
 ```
 
 This deterministically:
-- Adds `src/channels/discord.ts` (DiscordChannel class implementing Channel interface)
-- Adds `src/channels/discord.test.ts` (unit tests with discord.js mock)
-- Three-way merges Discord support into `src/index.ts` (multi-channel support, findChannel routing)
-- Three-way merges Discord config into `src/config.ts` (DISCORD_BOT_TOKEN, DISCORD_ONLY exports)
+- Adds `src/messaging/discord/DiscordChannel.ts` (DiscordChannel class implementing Channel interface)
+- Adds `src/messaging/discord/DiscordChannel.test.ts` (unit tests with discord.js mock)
+- Three-way merges Discord support into `src/index.ts` (multi-channel support, conditional channel creation)
+- Three-way merges Discord config into `src/infrastructure/Config.ts` (DISCORD_BOT_TOKEN, DISCORD_ONLY exports)
 - Three-way merges updated routing tests into `src/routing.test.ts`
 - Installs the `discord.js` npm dependency
 - Updates `.env.example` with `DISCORD_BOT_TOKEN` and `DISCORD_ONLY`
@@ -48,7 +48,7 @@ This deterministically:
 
 If the apply reports merge conflicts, read the intent files:
 - `modify/src/index.ts.intent.md` — what changed and invariants for index.ts
-- `modify/src/config.ts.intent.md` — what changed for config.ts
+- `modify/src/infrastructure/Config.ts.intent.md` — what changed for Config.ts
 
 ### Validate code changes
 

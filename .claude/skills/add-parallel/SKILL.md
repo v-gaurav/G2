@@ -65,7 +65,7 @@ grep "PARALLEL_API_KEY" .env | head -c 50
 
 ### 3. Update Container Runner
 
-Add `PARALLEL_API_KEY` to allowed environment variables in `src/container-runner.ts`:
+Add `PARALLEL_API_KEY` to allowed environment variables in `src/execution/ContainerRunner.ts`:
 
 Find the line:
 ```typescript
@@ -271,7 +271,7 @@ Look for: `Parallel AI MCP servers configured`
 
 **MCP servers not loading:**
 - Ensure PARALLEL_API_KEY is in .env
-- Verify container-runner.ts includes PARALLEL_API_KEY in allowedVars
+- Verify ContainerRunner.ts includes PARALLEL_API_KEY in allowedVars
 - Check agent-runner logs for "Parallel AI MCP servers configured" message
 
 **Task polling not working:**
@@ -284,7 +284,7 @@ Look for: `Parallel AI MCP servers configured`
 To remove Parallel AI integration:
 
 1. Remove from .env: `sed -i.bak '/PARALLEL_API_KEY/d' .env`
-2. Revert changes to container-runner.ts and agent-runner/src/index.ts
+2. Revert changes to `src/execution/ContainerRunner.ts` and `container/agent-runner/src/index.ts`
 3. Remove Web Research Tools section from groups/main/CLAUDE.md
 4. Rebuild: `./container/build.sh && npm run build`
 5. Restart: `launchctl kickstart -k gui/$(id -u)/com.g2`
