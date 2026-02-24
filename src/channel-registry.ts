@@ -30,12 +30,6 @@ export class ChannelRegistry {
     }
   }
 
-  async connectAll(): Promise<void> {
-    for (const channel of this.channels) {
-      await channel.connect();
-    }
-  }
-
   async disconnectAll(): Promise<void> {
     for (const channel of this.channels) {
       await channel.disconnect();

@@ -40,8 +40,7 @@ Single Node.js process that connects to WhatsApp, routes messages to Claude Agen
 | `src/channels/outgoing-message-queue.ts` | Rate-limited outbound message queue |
 | `src/channel-registry.ts` | Registry pattern for multiple channels |
 | `src/message-formatter.ts` | Message format transforms (XML encoding, internal tag stripping) |
-| `src/message-router.ts` | High-level message routing over ChannelRegistry |
-| `src/router.ts` | Backward-compatible re-exports (delegates to message-formatter and message-router) |
+| `src/router.ts` | Backward-compatible re-exports (delegates to message-formatter) |
 
 ### Container & Execution
 | File | Purpose |
@@ -92,7 +91,7 @@ Single Node.js process that connects to WhatsApp, routes messages to Claude Agen
 ### Security & Validation
 | File | Purpose |
 |------|---------|
-| `src/authorization.ts` | Fine-grained auth (`AuthorizationPolicy` class + standalone guards) |
+| `src/authorization.ts` | Fine-grained auth (`AuthorizationPolicy` class) |
 | `src/mount-security.ts` | Mount allowlist validation for containers |
 | `src/trigger-validator.ts` | Trigger pattern matching for non-main groups |
 | `src/env.ts` | Secure `.env` file parsing |
@@ -100,7 +99,6 @@ Single Node.js process that connects to WhatsApp, routes messages to Claude Agen
 ### Utilities
 | File | Purpose |
 |------|---------|
-| `src/retry.ts` | Async retry with exponential backoff |
 | `src/safe-parse.ts` | Safe JSON parsing (returns null on failure) |
 
 ### Other

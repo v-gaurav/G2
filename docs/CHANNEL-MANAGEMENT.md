@@ -431,9 +431,8 @@ Each channel's `disconnect()` handles platform-specific cleanup (e.g., closing W
 | `src/channels/outgoing-message-queue.ts` | `OutgoingMessageQueue` — FIFO buffer for disconnection resilience |
 | `src/channels/whatsapp-metadata-sync.ts` | `WhatsAppMetadataSync` — group name sync with 24h cache |
 | `src/message-formatter.ts` | `MessageFormatter` — `formatMessages()`, `formatOutbound()`, `stripInternalTags()` |
-| `src/message-router.ts` | `MessageRouter` — high-level routing and send operations over ChannelRegistry |
-| `src/router.ts` | Backward-compatible re-exports (delegates to message-formatter and message-router) |
-| `src/authorization.ts` | `AuthorizationPolicy` class + standalone guards (`canSendMessage()`, etc.) |
+| `src/router.ts` | Backward-compatible re-exports (delegates to message-formatter) |
+| `src/authorization.ts` | `AuthorizationPolicy` class for fine-grained IPC auth |
 | `src/db.ts` | Composition root delegating to `src/repositories/` for DB operations |
 | `src/config.ts` | `ASSISTANT_NAME`, `ASSISTANT_HAS_OWN_NUMBER`, `STORE_DIR` |
 | `src/index.ts` | Entry point: channel setup, callback wiring, `main()` bootstrap |

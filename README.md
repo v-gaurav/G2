@@ -152,7 +152,7 @@ Key files:
 - `src/task-scheduler.ts` - Runs scheduled tasks
 - `src/session-manager.ts` - Claude Agent SDK session management
 - `src/message-formatter.ts` - Message format transforms (XML, internal tags)
-- `src/message-router.ts` - High-level message routing over ChannelRegistry
+- `src/router.ts` - Backward-compatible formatting re-exports
 - `src/authorization.ts` - Fine-grained IPC auth
 - `src/mount-security.ts` - Mount allowlist validation
 - `src/db.ts` - Thin composition root; `src/repositories/` - Domain-specific DB repositories

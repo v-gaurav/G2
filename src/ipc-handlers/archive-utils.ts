@@ -3,12 +3,12 @@ import fs from 'fs';
 import { GroupPaths } from '../group-paths.js';
 import { logger } from '../logger.js';
 
-export interface ParsedMessage {
+interface ParsedMessage {
   role: 'user' | 'assistant';
   content: string;
 }
 
-export function parseTranscript(content: string): ParsedMessage[] {
+function parseTranscript(content: string): ParsedMessage[] {
   const messages: ParsedMessage[] = [];
 
   for (const line of content.split('\n')) {
@@ -35,7 +35,7 @@ export function parseTranscript(content: string): ParsedMessage[] {
   return messages;
 }
 
-export function formatTranscriptMarkdown(messages: ParsedMessage[], title: string): string {
+function formatTranscriptMarkdown(messages: ParsedMessage[], title: string): string {
   const now = new Date();
   const formatDateTime = (d: Date) => d.toLocaleString('en-US', {
     month: 'short',

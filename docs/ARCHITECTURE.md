@@ -216,7 +216,7 @@ Scheduled task output is not sent to users automatically — the agent must use 
 
 ### 9. Authorization
 
-Role-based authorization enforced at every IPC boundary (`src/authorization.ts`). The `AuthorizationPolicy` class encapsulates checks for a single source context; standalone guard functions provide backward compatibility.
+Role-based authorization enforced at every IPC boundary (`src/authorization.ts`). The `AuthorizationPolicy` class encapsulates checks for a single source context.
 
 | Operation | Main Group | Non-Main Group |
 |---|---|---|
@@ -307,5 +307,5 @@ Agent output flows through `src/message-formatter.ts` (re-exported via `src/rout
 | File-based IPC | Atomic JSON file writes, `fs.watch` + fallback poll, no sockets |
 | Composed services | `AgentExecutor` (container execution), `MessageProcessor` (polling + cursors), `Orchestrator` (wiring) |
 | Repository pattern | `src/repositories/` — domain-specific DB classes behind `AppDatabase` composition root |
-| Shared utilities | `startPollLoop`, `createIdleTimer`, `IpcTransport`, `refreshTasksSnapshot`, `GroupPaths`, `retry`, `safeParse` |
+| Shared utilities | `startPollLoop`, `createIdleTimer`, `IpcTransport`, `refreshTasksSnapshot`, `GroupPaths`, `safeParse` |
 | Untrusted containers | Host validates every IPC command before acting |

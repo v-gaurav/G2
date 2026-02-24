@@ -124,8 +124,7 @@ g2/
 │   │   └── outgoing-message-queue.ts  # Rate-limited outbound message queue
 │   ├── channel-registry.ts        # Registry pattern for multiple channels
 │   ├── message-formatter.ts       # Message format transforms (XML encoding, internal tag stripping)
-│   ├── message-router.ts          # High-level message routing over ChannelRegistry
-│   ├── router.ts                  # Backward-compatible re-exports (delegates to message-formatter and message-router)
+│   ├── router.ts                  # Backward-compatible re-exports (delegates to message-formatter)
 │   ├── container-runner.ts        # Spawns agents in containers
 │   ├── container-runtime.ts       # Docker runtime abstraction
 │   ├── group-queue.ts             # Per-group queue with global concurrency limit
@@ -136,7 +135,6 @@ g2/
 │   ├── idle-timer.ts              # Shared idle timer utility
 │   ├── ipc-transport.ts           # File-based IPC write operations
 │   ├── task-snapshots.ts          # Task snapshot writing for containers
-│   ├── retry.ts                   # Async retry with exponential backoff
 │   ├── safe-parse.ts              # Safe JSON parsing (returns null on failure)
 │   ├── ipc.ts                     # IPC watcher (fs.watch + fallback poll)
 │   ├── ipc-handlers/              # Modular IPC command handlers
@@ -164,7 +162,7 @@ g2/
 │   │   ├── default-mount-factory.ts  # Default mount builder (group/main-aware)
 │   │   ├── message-store.ts       # IMessageStore interface
 │   │   └── sqlite-message-store.ts   # SQLite implementation of IMessageStore
-│   ├── authorization.ts           # Fine-grained IPC auth (AuthorizationPolicy class + standalone guards)
+│   ├── authorization.ts           # Fine-grained IPC auth (AuthorizationPolicy class)
 │   ├── mount-security.ts          # Mount allowlist validation for containers
 │   ├── trigger-validator.ts       # Trigger pattern matching for non-main groups
 │   └── whatsapp-auth.ts           # Standalone WhatsApp authentication

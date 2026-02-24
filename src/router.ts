@@ -1,15 +1,9 @@
 /**
  * Backward-compatible re-exports.
  *
- * The actual logic now lives in:
- *   - MessageFormatter  (src/message-formatter.ts) — format transforms
- *   - MessageRouter     (src/message-router.ts)    — routing decisions
- *
+ * The actual logic lives in MessageFormatter (src/message-formatter.ts).
  * Existing callers that import { formatMessages } from './router.js' continue to work.
  */
-
-export { MessageFormatter } from './message-formatter.js';
-export { MessageRouter } from './message-router.js';
 
 import { MessageFormatter } from './message-formatter.js';
 import type { NewMessage } from './types.js';
