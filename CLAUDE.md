@@ -11,11 +11,26 @@ Single Node.js process that connects to WhatsApp, routes messages to Claude Agen
 ### Core
 | File | Purpose |
 |------|---------|
-| `src/index.ts` | Orchestrator: state, message loop, agent invocation |
+| `src/index.ts` | Entry point: channel setup, `main()` bootstrap |
+| `src/orchestrator.ts` | Orchestrator class: composes services, wires subsystems |
+| `src/message-processor.ts` | Message polling, cursor management, trigger checking |
+| `src/agent-executor.ts` | Container execution, session tracking, snapshot writing |
 | `src/types.ts` | Central type definitions (`Channel`, `RegisteredGroup`, `NewMessage`, etc.) |
-| `src/config.ts` | Trigger pattern, paths, intervals, container settings |
+| `src/config.ts` | Trigger pattern, paths, intervals, container settings, `TimeoutConfig` |
 | `src/logger.ts` | Pino logger singleton |
-| `src/db.ts` | SQLite operations (messages, groups, sessions, tasks, state) |
+| `src/db.ts` | Thin composition root delegating to domain repositories |
+
+### Repositories (`src/repositories/`)
+| File | Purpose |
+|------|---------|
+| `src/repositories/schema.ts` | Schema creation, migrations, DB init logic |
+| `src/repositories/chat-repository.ts` | Chat metadata CRUD |
+| `src/repositories/message-repository.ts` | Message storage and retrieval |
+| `src/repositories/task-repository.ts` | Scheduled task CRUD, claiming, run logging |
+| `src/repositories/session-repository.ts` | Agent session persistence |
+| `src/repositories/archive-repository.ts` | Conversation archive storage and search |
+| `src/repositories/group-repository.ts` | Registered group persistence |
+| `src/repositories/state-repository.ts` | Router state (key-value) persistence |
 
 ### Channels & Routing
 | File | Purpose |
@@ -24,7 +39,9 @@ Single Node.js process that connects to WhatsApp, routes messages to Claude Agen
 | `src/channels/whatsapp-metadata-sync.ts` | WhatsApp group metadata syncing |
 | `src/channels/outgoing-message-queue.ts` | Rate-limited outbound message queue |
 | `src/channel-registry.ts` | Registry pattern for multiple channels |
-| `src/router.ts` | Message formatting and outbound routing |
+| `src/message-formatter.ts` | Message format transforms (XML encoding, internal tag stripping) |
+| `src/message-router.ts` | High-level message routing over ChannelRegistry |
+| `src/router.ts` | Backward-compatible re-exports (delegates to message-formatter and message-router) |
 
 ### Container & Execution
 | File | Purpose |
@@ -34,6 +51,7 @@ Single Node.js process that connects to WhatsApp, routes messages to Claude Agen
 | `src/group-queue.ts` | Per-group queue with global concurrency limit |
 | `src/task-scheduler.ts` | Runs scheduled tasks |
 | `src/session-manager.ts` | Claude Agent SDK session management per group |
+| `src/group-paths.ts` | Centralized path construction for group directories |
 | `src/poll-loop.ts` | Shared polling loop abstraction |
 | `src/idle-timer.ts` | Shared idle timer utility |
 | `src/ipc-transport.ts` | File-based IPC write operations |
@@ -57,6 +75,8 @@ Single Node.js process that connects to WhatsApp, routes messages to Claude Agen
 | `src/ipc-handlers/archive-session.ts` | Handle `archive_session` IPC command (PreCompact) |
 | `src/ipc-handlers/archive-utils.ts` | Shared transcript parsing and formatting |
 | `src/ipc-handlers/refresh-groups.ts` | Handle `refresh_groups` IPC command |
+| `src/ipc-handlers/base-handler.ts` | Base class for IPC handlers (validation, context) |
+| `src/ipc-handlers/task-helpers.ts` | Shared task lookup and authorization helper |
 
 ### Interfaces (`src/interfaces/`)
 | File | Purpose |
@@ -72,11 +92,16 @@ Single Node.js process that connects to WhatsApp, routes messages to Claude Agen
 ### Security & Validation
 | File | Purpose |
 |------|---------|
-| `src/authorization.ts` | Fine-grained auth (`canSendMessage`, `canScheduleTask`, etc.) |
+| `src/authorization.ts` | Fine-grained auth (`AuthorizationPolicy` class + standalone guards) |
 | `src/mount-security.ts` | Mount allowlist validation for containers |
 | `src/trigger-validator.ts` | Trigger pattern matching for non-main groups |
-| `src/timeout-config.ts` | Container timeout configuration |
 | `src/env.ts` | Secure `.env` file parsing |
+
+### Utilities
+| File | Purpose |
+|------|---------|
+| `src/retry.ts` | Async retry with exponential backoff |
+| `src/safe-parse.ts` | Safe JSON parsing (returns null on failure) |
 
 ### Other
 | File | Purpose |

@@ -45,7 +45,7 @@ Channels implement the `Channel` interface (`connect`, `sendMessage`, `isConnect
 
 ### 2. Message Loop
 
-`startMessageLoop()` in `src/index.ts` runs every `POLL_INTERVAL` (2s):
+`MessageProcessor.startPolling()` in `src/message-processor.ts` runs every `POLL_INTERVAL` (2s):
 
 1. `getNewMessages()` fetches messages since `lastTimestamp` from SQLite
 2. Deduplicates by group (one container invocation per group per cycle)
@@ -216,7 +216,7 @@ Scheduled task output is not sent to users automatically — the agent must use 
 
 ### 9. Authorization
 
-Role-based authorization enforced at every IPC boundary (`src/authorization.ts`):
+Role-based authorization enforced at every IPC boundary (`src/authorization.ts`). The `AuthorizationPolicy` class encapsulates checks for a single source context; standalone guard functions provide backward compatibility.
 
 | Operation | Main Group | Non-Main Group |
 |---|---|---|
@@ -240,7 +240,7 @@ Auth context: `{ sourceGroup: string, isMain: boolean }`
 
 ### 11. Data Persistence
 
-SQLite database (`store/messages.db`). Containers have no direct DB access — all data flows through the host.
+SQLite database (`store/messages.db`). Containers have no direct DB access — all data flows through the host. `AppDatabase` in `src/db.ts` is a thin composition root that delegates to domain repositories in `src/repositories/` (chat, message, task, session, archive, group, state).
 
 | Table | Purpose |
 |---|---|
@@ -257,32 +257,40 @@ SQLite database (`store/messages.db`). Containers have no direct DB access — a
 
 ## Startup Sequence
 
+`main()` in `src/index.ts` creates channels and the `Orchestrator`, then calls `orchestrator.start()`:
+
 ```
-main()
+main() [src/index.ts]
+  1. Create WhatsApp channel with callbacks
+  2. orchestrator.addChannel(whatsapp)
+  3. orchestrator.start()
+
+Orchestrator.start() [src/orchestrator.ts]
   1. ensureContainerSystemRunning()     — verify Docker, clean orphan containers
   2. initDatabase()                     — create/migrate SQLite
-  3. loadState()                        — restore cursors, sessions, groups
-  4. Signal handlers (SIGTERM, SIGINT)  — graceful shutdown
-  5. WhatsApp channel connect           — auth, WebSocket
-  6. channelRegistry.register()         — register WhatsApp
-  7. startSchedulerLoop()               — 60s task polling
-  8. startIpcWatcher()                  — fs.watch + 10s fallback IPC polling
-  9. queue.setProcessMessagesFn()       — wire message handler
- 10. recoverPendingMessages()           — re-queue unprocessed messages from crash
- 11. startMessageLoop()                 — 2s message polling
+  3. Load sessions and registered groups from DB
+  4. Create AgentExecutor and MessageProcessor (composed services)
+  5. messageProcessor.loadState()       — restore cursors from DB
+  6. Signal handlers (SIGTERM, SIGINT)  — graceful shutdown
+  7. Connect all registered channels    — auth, WebSocket
+  8. startSchedulerLoop()               — 60s task polling
+  9. startIpcWatcher()                  — fs.watch + 10s fallback IPC polling
+ 10. queue.setProcessMessagesFn()       — wire message handler
+ 11. messageProcessor.recoverPendingMessages() — re-queue unprocessed messages from crash
+ 12. messageProcessor.startPolling()    — 2s message polling
 ```
 
 ## Crash Recovery
 
-- On startup, `recoverPendingMessages()` checks each registered group for unprocessed messages
+- On startup, `MessageProcessor.recoverPendingMessages()` checks each registered group for unprocessed messages
 - If `lastAgentTimestamp[group]` has unprocessed messages, they are re-queued immediately
 - Handles the gap between advancing `lastTimestamp` and completing agent processing
 
 ## Output Processing
 
-Agent output flows through `src/router.ts`:
-- `formatOutbound()` strips `<internal>...</internal>` tags (agent reasoning hidden from users)
-- `escapeXml()` prevents XML injection in inbound message formatting
+Agent output flows through `src/message-formatter.ts` (re-exported via `src/router.ts` for backward compatibility):
+- `MessageFormatter.formatOutbound()` strips `<internal>...</internal>` tags (agent reasoning hidden from users)
+- `MessageFormatter.escapeXml()` prevents XML injection in inbound message formatting
 - Empty strings after stripping are discarded (no empty messages sent)
 
 ---
@@ -297,5 +305,7 @@ Agent output flows through `src/router.ts`:
 | Streaming output | Agent results sent immediately via sentinel markers |
 | Channel abstraction | `Channel` interface + `ChannelRegistry` for pluggable transports |
 | File-based IPC | Atomic JSON file writes, `fs.watch` + fallback poll, no sockets |
-| Shared utilities | `startPollLoop`, `createIdleTimer`, `IpcTransport`, `refreshTasksSnapshot` |
+| Composed services | `AgentExecutor` (container execution), `MessageProcessor` (polling + cursors), `Orchestrator` (wiring) |
+| Repository pattern | `src/repositories/` — domain-specific DB classes behind `AppDatabase` composition root |
+| Shared utilities | `startPollLoop`, `createIdleTimer`, `IpcTransport`, `refreshTasksSnapshot`, `GroupPaths`, `retry`, `safeParse` |
 | Untrusted containers | Host validates every IPC command before acting |

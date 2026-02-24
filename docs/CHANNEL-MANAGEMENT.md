@@ -116,7 +116,7 @@ The channel listens for platform-specific events and translates them into the co
 
 ### Step 2: Callback → SQLite
 
-Callbacks defined in `src/index.ts:394-400`:
+Callbacks defined in `src/index.ts` (`main()` function):
 
 ```typescript
 onMessage:     (chatJid, msg)  => storeMessage(msg);
@@ -127,7 +127,7 @@ Messages are stored in the `messages` table, chat metadata in the `chats` table.
 
 ### Step 3: Polling Loop → Container
 
-`startMessageLoop()` runs every `POLL_INTERVAL` (2s):
+`MessageProcessor.startPolling()` (in `src/message-processor.ts`) runs every `POLL_INTERVAL` (2s):
 
 1. `getNewMessages()` fetches messages since `lastTimestamp`
 2. Deduplicates by group (one container per group per cycle)
@@ -184,9 +184,9 @@ The registry finds the correct channel by JID pattern. The channel handles platf
 
 ### Step 4: Outbound Formatting
 
-`src/router.ts` processes agent output before sending:
+`src/message-formatter.ts` (re-exported via `src/router.ts`) processes agent output before sending:
 
-1. `stripInternalTags()` — removes `<internal>...</internal>` reasoning blocks
+1. `MessageFormatter.stripInternalTags()` — removes `<internal>...</internal>` reasoning blocks
 2. Empty strings after stripping are discarded (no empty messages sent)
 
 ### Task Scheduler Output
@@ -411,7 +411,7 @@ G2 provides skills for adding channels:
 
 ## Graceful Shutdown
 
-On `SIGTERM` or `SIGINT` (`src/index.ts:384-392`):
+On `SIGTERM` or `SIGINT` (`src/orchestrator.ts` — `shutdown()`):
 
 1. `queue.shutdown(10000)` — drain active containers (10s timeout)
 2. `channelRegistry.disconnectAll()` — disconnect every channel gracefully
@@ -430,8 +430,13 @@ Each channel's `disconnect()` handles platform-specific cleanup (e.g., closing W
 | `src/channels/whatsapp.ts` | `WhatsAppChannel` — Baileys connection, send/receive, LID translation |
 | `src/channels/outgoing-message-queue.ts` | `OutgoingMessageQueue` — FIFO buffer for disconnection resilience |
 | `src/channels/whatsapp-metadata-sync.ts` | `WhatsAppMetadataSync` — group name sync with 24h cache |
-| `src/router.ts` | `formatMessages()`, `formatOutbound()`, `stripInternalTags()` |
-| `src/authorization.ts` | `canSendMessage()` and other auth checks at IPC boundary |
-| `src/db.ts` | `storeMessage()`, `storeChatMetadata()`, `updateChatName()`, chat/message schema |
+| `src/message-formatter.ts` | `MessageFormatter` — `formatMessages()`, `formatOutbound()`, `stripInternalTags()` |
+| `src/message-router.ts` | `MessageRouter` — high-level routing and send operations over ChannelRegistry |
+| `src/router.ts` | Backward-compatible re-exports (delegates to message-formatter and message-router) |
+| `src/authorization.ts` | `AuthorizationPolicy` class + standalone guards (`canSendMessage()`, etc.) |
+| `src/db.ts` | Composition root delegating to `src/repositories/` for DB operations |
 | `src/config.ts` | `ASSISTANT_NAME`, `ASSISTANT_HAS_OWN_NUMBER`, `STORE_DIR` |
-| `src/index.ts` | Channel initialization, callback wiring, message loop, shutdown |
+| `src/index.ts` | Entry point: channel setup, callback wiring, `main()` bootstrap |
+| `src/orchestrator.ts` | `Orchestrator` — composes services, wires subsystems, shutdown |
+| `src/message-processor.ts` | `MessageProcessor` — message polling, cursor management, trigger checking |
+| `src/agent-executor.ts` | `AgentExecutor` — container execution, session tracking, snapshot writing |

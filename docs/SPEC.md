@@ -100,31 +100,50 @@ g2/
 ├── .gitignore
 │
 ├── src/
-│   ├── index.ts                   # Orchestrator: state, message loop, agent invocation
+│   ├── index.ts                   # Entry point: channel setup, main() bootstrap
+│   ├── orchestrator.ts            # Orchestrator class: composes services, wires subsystems
+│   ├── message-processor.ts       # Message polling, cursor management, trigger checking
+│   ├── agent-executor.ts          # Container execution, session tracking, snapshot writing
 │   ├── types.ts                   # TypeScript interfaces (Channel, RegisteredGroup, NewMessage, etc.)
-│   ├── config.ts                  # Configuration constants
+│   ├── config.ts                  # Configuration constants and TimeoutConfig
 │   ├── logger.ts                  # Pino logger setup
-│   ├── db.ts                      # SQLite database initialization and queries
+│   ├── db.ts                      # Thin composition root delegating to domain repositories
 │   ├── env.ts                     # Secure .env file parsing
+│   ├── repositories/              # Domain-specific database repositories
+│   │   ├── schema.ts              # Schema creation, migrations, DB init logic
+│   │   ├── chat-repository.ts     # Chat metadata CRUD
+│   │   ├── message-repository.ts  # Message storage and retrieval
+│   │   ├── task-repository.ts     # Scheduled task CRUD, claiming, run logging
+│   │   ├── session-repository.ts  # Agent session persistence
+│   │   ├── archive-repository.ts  # Conversation archive storage and search
+│   │   ├── group-repository.ts    # Registered group persistence
+│   │   └── state-repository.ts    # Router state (key-value) persistence
 │   ├── channels/
 │   │   ├── whatsapp.ts            # WhatsApp connection, auth, send/receive
 │   │   ├── whatsapp-metadata-sync.ts  # WhatsApp group metadata syncing
 │   │   └── outgoing-message-queue.ts  # Rate-limited outbound message queue
 │   ├── channel-registry.ts        # Registry pattern for multiple channels
-│   ├── router.ts                  # Message formatting and outbound routing
+│   ├── message-formatter.ts       # Message format transforms (XML encoding, internal tag stripping)
+│   ├── message-router.ts          # High-level message routing over ChannelRegistry
+│   ├── router.ts                  # Backward-compatible re-exports (delegates to message-formatter and message-router)
 │   ├── container-runner.ts        # Spawns agents in containers
 │   ├── container-runtime.ts       # Docker runtime abstraction
 │   ├── group-queue.ts             # Per-group queue with global concurrency limit
+│   ├── group-paths.ts             # Centralized path construction for group directories
 │   ├── task-scheduler.ts          # Runs scheduled tasks when due
 │   ├── session-manager.ts         # Claude Agent SDK session management per group
 │   ├── poll-loop.ts               # Shared polling loop abstraction
 │   ├── idle-timer.ts              # Shared idle timer utility
 │   ├── ipc-transport.ts           # File-based IPC write operations
 │   ├── task-snapshots.ts          # Task snapshot writing for containers
+│   ├── retry.ts                   # Async retry with exponential backoff
+│   ├── safe-parse.ts              # Safe JSON parsing (returns null on failure)
 │   ├── ipc.ts                     # IPC watcher (fs.watch + fallback poll)
 │   ├── ipc-handlers/              # Modular IPC command handlers
 │   │   ├── index.ts               # Exports all handlers
 │   │   ├── types.ts               # IpcCommandHandler interface
+│   │   ├── base-handler.ts        # Base class for IPC handlers (validation, context)
+│   │   ├── task-helpers.ts        # Shared task lookup and authorization helper
 │   │   ├── dispatcher.ts          # Routes IPC commands to handlers
 │   │   ├── schedule-task.ts       # Handle schedule_task command
 │   │   ├── register-group.ts      # Handle register_group command
@@ -133,9 +152,9 @@ g2/
 │   │   ├── cancel-task.ts         # Handle cancel_task command
 │   │   ├── clear-session.ts       # Handle clear_session command
 │   │   ├── resume-session.ts      # Handle resume_session command
-│   │   ├── search-sessions.ts    # Handle search_sessions command (round-trip)
-│   │   ├── archive-session.ts    # Handle archive_session command (PreCompact)
-│   │   ├── archive-utils.ts      # Shared transcript parsing and formatting
+│   │   ├── search-sessions.ts     # Handle search_sessions command (round-trip)
+│   │   ├── archive-session.ts     # Handle archive_session command (PreCompact)
+│   │   ├── archive-utils.ts       # Shared transcript parsing and formatting
 │   │   └── refresh-groups.ts      # Handle refresh_groups command
 │   ├── interfaces/                # Composable abstraction layer
 │   │   ├── index.ts               # Exports all interfaces
@@ -145,10 +164,9 @@ g2/
 │   │   ├── default-mount-factory.ts  # Default mount builder (group/main-aware)
 │   │   ├── message-store.ts       # IMessageStore interface
 │   │   └── sqlite-message-store.ts   # SQLite implementation of IMessageStore
-│   ├── authorization.ts           # Fine-grained IPC auth (canSendMessage, canScheduleTask, etc.)
+│   ├── authorization.ts           # Fine-grained IPC auth (AuthorizationPolicy class + standalone guards)
 │   ├── mount-security.ts          # Mount allowlist validation for containers
 │   ├── trigger-validator.ts       # Trigger pattern matching for non-main groups
-│   ├── timeout-config.ts          # Container timeout configuration
 │   └── whatsapp-auth.ts           # Standalone WhatsApp authentication
 │
 │

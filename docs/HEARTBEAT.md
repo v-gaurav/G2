@@ -29,7 +29,7 @@ All three loops use `startPollLoop()` (`src/poll-loop.ts`) — a shared abstract
 
 ## Loop 1: Message Loop
 
-**File:** `src/index.ts` — `startMessageLoop()`
+**File:** `src/message-processor.ts` — `MessageProcessor.startPolling()`
 **Interval:** `POLL_INTERVAL` = 2 seconds
 
 Polls SQLite for new incoming messages across all registered groups.
@@ -309,7 +309,7 @@ Both the message loop and scheduler use the same `createIdleTimer()` utility to 
 
 ## Startup Recovery
 
-**File:** `src/index.ts` — `recoverPendingMessages()`
+**File:** `src/message-processor.ts` — `MessageProcessor.recoverPendingMessages()`
 
 On startup, G2 checks for messages that were "seen" (cursor advanced) but never processed (container crashed before completion):
 
@@ -397,6 +397,8 @@ All task operations are gated by authorization context `{ sourceGroup, isMain }`
 | `src/ipc.ts` | IPC watcher (fs.watch + fallback poll) |
 | `src/ipc-handlers/` | Individual IPC command handlers |
 | `src/group-queue.ts` | Concurrency queue with per-group state |
-| `src/db.ts` | `getDueTasks()`, `claimTask()`, `updateTaskAfterRun()`, `logTaskRun()` |
+| `src/message-processor.ts` | `MessageProcessor` — message polling, cursor management, trigger checking |
+| `src/agent-executor.ts` | `AgentExecutor` — container execution, session tracking, snapshot writing |
+| `src/db.ts` | Composition root delegating to `src/repositories/` for DB operations |
 | `src/config.ts` | Timing constants and timezone resolution |
 | `src/authorization.ts` | Permission checks for task operations |
