@@ -101,71 +101,58 @@ g2/
 │
 ├── src/
 │   ├── index.ts                   # Entry point: channel setup, main() bootstrap
-│   ├── orchestrator.ts            # Orchestrator class: composes services, wires subsystems
-│   ├── message-processor.ts       # Message polling, cursor management, trigger checking
-│   ├── agent-executor.ts          # Container execution, session tracking, snapshot writing
+│   ├── app.ts                     # App class: composes services, wires subsystems
 │   ├── types.ts                   # TypeScript interfaces (Channel, RegisteredGroup, NewMessage, etc.)
-│   ├── config.ts                  # Configuration constants and TimeoutConfig
-│   ├── logger.ts                  # Pino logger setup
-│   ├── db.ts                      # Thin composition root delegating to domain repositories
-│   ├── env.ts                     # Secure .env file parsing
-│   ├── repositories/              # Domain-specific database repositories
-│   │   ├── schema.ts              # Schema creation, migrations, DB init logic
-│   │   ├── chat-repository.ts     # Chat metadata CRUD
-│   │   ├── message-repository.ts  # Message storage and retrieval
-│   │   ├── task-repository.ts     # Scheduled task CRUD, claiming, run logging
-│   │   ├── session-repository.ts  # Agent session persistence
-│   │   ├── archive-repository.ts  # Conversation archive storage and search
-│   │   ├── group-repository.ts    # Registered group persistence
-│   │   └── state-repository.ts    # Router state (key-value) persistence
-│   ├── channels/
-│   │   ├── whatsapp.ts            # WhatsApp connection, auth, send/receive
-│   │   ├── whatsapp-metadata-sync.ts  # WhatsApp group metadata syncing
-│   │   └── outgoing-message-queue.ts  # Rate-limited outbound message queue
-│   ├── channel-registry.ts        # Registry pattern for multiple channels
-│   ├── message-formatter.ts       # Message format transforms (XML encoding, internal tag stripping)
-│   ├── router.ts                  # Backward-compatible re-exports (delegates to message-formatter)
-│   ├── container-runner.ts        # Spawns agents in containers
-│   ├── container-runtime.ts       # Docker runtime abstraction
-│   ├── group-queue.ts             # Per-group queue with global concurrency limit
-│   ├── group-paths.ts             # Centralized path construction for group directories
-│   ├── task-scheduler.ts          # Runs scheduled tasks when due
-│   ├── session-manager.ts         # Claude Agent SDK session management per group
-│   ├── poll-loop.ts               # Shared polling loop abstraction
-│   ├── idle-timer.ts              # Shared idle timer utility
-│   ├── ipc-transport.ts           # File-based IPC write operations
-│   ├── task-snapshots.ts          # Task snapshot writing for containers
-│   ├── safe-parse.ts              # Safe JSON parsing (returns null on failure)
-│   ├── ipc.ts                     # IPC watcher (fs.watch + fallback poll)
-│   ├── ipc-handlers/              # Modular IPC command handlers
-│   │   ├── index.ts               # Exports all handlers
+│   ├── whatsapp-auth.ts           # Standalone WhatsApp authentication
+│   ├── execution/                 # Container execution and isolation
+│   │   ├── AgentExecutor.ts       # Container execution, session tracking, snapshot writing
+│   │   ├── ContainerOutputParser.ts # Stateful parser for OUTPUT_START/END marker protocol
+│   │   ├── ContainerRunner.ts     # Spawns agents in containers
+│   │   ├── ContainerRuntime.ts    # IContainerRuntime interface and Docker implementation
+│   │   ├── ExecutionQueue.ts      # Per-group queue with global concurrency limit
+│   │   ├── MountBuilder.ts        # IMountFactory interface and default mount builder
+│   │   └── MountSecurity.ts       # Mount allowlist validation for containers
+│   ├── groups/                    # Group management
+│   │   ├── types.ts               # Group-related types
+│   │   ├── Authorization.ts       # Fine-grained IPC auth (AuthorizationPolicy class)
+│   │   ├── GroupPaths.ts          # Centralized path construction for group directories
+│   │   └── GroupRepository.ts     # Registered group persistence
+│   ├── infrastructure/            # Shared infrastructure
+│   │   ├── Config.ts              # Configuration constants, TimeoutConfig, secure .env parsing
+│   │   ├── Database.ts            # Schema, migrations, DB init logic
+│   │   ├── Logger.ts              # Pino logger setup
+│   │   ├── StateRepository.ts     # Router state (key-value) persistence
+│   │   ├── idle-timer.ts          # Shared idle timer utility
+│   │   └── poll-loop.ts           # Shared polling loop abstraction
+│   ├── ipc/                       # IPC communication
 │   │   ├── types.ts               # IpcCommandHandler interface
-│   │   ├── base-handler.ts        # Base class for IPC handlers (validation, context)
-│   │   ├── task-helpers.ts        # Shared task lookup and authorization helper
-│   │   ├── dispatcher.ts          # Routes IPC commands to handlers
-│   │   ├── schedule-task.ts       # Handle schedule_task command
-│   │   ├── register-group.ts      # Handle register_group command
-│   │   ├── pause-task.ts          # Handle pause_task command
-│   │   ├── resume-task.ts         # Handle resume_task command
-│   │   ├── cancel-task.ts         # Handle cancel_task command
-│   │   ├── clear-session.ts       # Handle clear_session command
-│   │   ├── resume-session.ts      # Handle resume_session command
-│   │   ├── search-sessions.ts     # Handle search_sessions command (round-trip)
-│   │   ├── archive-session.ts     # Handle archive_session command (PreCompact)
-│   │   ├── archive-utils.ts       # Shared transcript parsing and formatting
-│   │   └── refresh-groups.ts      # Handle refresh_groups command
-│   ├── interfaces/                # Composable abstraction layer
-│   │   ├── index.ts               # Exports all interfaces
-│   │   ├── container-runtime.ts   # IContainerRuntime interface
-│   │   ├── docker-runtime.ts      # Docker implementation of IContainerRuntime
-│   │   ├── mount-factory.ts       # IMountFactory interface
-│   │   ├── default-mount-factory.ts  # Default mount builder (group/main-aware)
-│   │   ├── message-store.ts       # IMessageStore interface
-│   │   └── sqlite-message-store.ts   # SQLite implementation of IMessageStore
-│   ├── authorization.ts           # Fine-grained IPC auth (AuthorizationPolicy class)
-│   ├── mount-security.ts          # Mount allowlist validation for containers
-│   ├── trigger-validator.ts       # Trigger pattern matching for non-main groups
-│   └── whatsapp-auth.ts           # Standalone WhatsApp authentication
+│   │   ├── IpcDispatcher.ts       # Routes IPC commands to handlers, base handler logic
+│   │   ├── IpcTransport.ts        # File-based IPC write operations
+│   │   ├── IpcWatcher.ts          # IPC watcher (fs.watch + fallback poll)
+│   │   └── handlers/              # Consolidated IPC command handlers
+│   │       ├── GroupHandlers.ts   # Handle register_group, refresh_groups commands
+│   │       ├── SessionHandlers.ts # Handle clear/resume/search/archive session commands
+│   │       └── TaskHandlers.ts    # Handle schedule/pause/resume/cancel task commands
+│   ├── messaging/                 # Message routing and formatting
+│   │   ├── types.ts               # Messaging-related types
+│   │   ├── ChannelRegistry.ts     # Registry pattern for multiple channels
+│   │   ├── MessageFormatter.ts    # Message format transforms (XML encoding, internal tag stripping)
+│   │   ├── MessagePoller.ts       # Message polling, cursor management, trigger checking
+│   │   ├── MessageRepository.ts   # Chat metadata and message storage/retrieval
+│   │   └── whatsapp/              # WhatsApp channel implementation
+│   │       ├── MetadataSync.ts    # WhatsApp group metadata syncing
+│   │       ├── OutgoingMessageQueue.ts # Rate-limited outbound message queue
+│   │       └── WhatsAppChannel.ts # WhatsApp connection, auth, send/receive
+│   ├── scheduling/                # Task scheduling
+│   │   ├── types.ts               # Scheduling-related types
+│   │   ├── SnapshotWriter.ts      # Task snapshot writing for containers
+│   │   ├── TaskRepository.ts      # Scheduled task CRUD, claiming, run logging
+│   │   ├── TaskScheduler.ts       # Runs scheduled tasks when due
+│   │   └── TaskService.ts         # Centralized task lifecycle management
+│   └── sessions/                  # Session management
+│       ├── types.ts               # Session-related types
+│       ├── SessionManager.ts      # Claude Agent SDK session management per group
+│       └── SessionRepository.ts   # Agent session + conversation archive persistence
 │
 │
 ├── container/
@@ -231,7 +218,7 @@ g2/
 
 ## Configuration
 
-Configuration constants are in `src/config.ts`:
+Configuration constants are in `src/infrastructure/Config.ts`:
 
 ```typescript
 import path from 'path';
@@ -320,7 +307,7 @@ Set the `ASSISTANT_NAME` environment variable:
 ASSISTANT_NAME=Bot npm start
 ```
 
-Or edit the default in `src/config.ts`. This changes:
+Or edit the default in `src/infrastructure/Config.ts`. This changes:
 - The trigger pattern (messages must start with `@YourName`)
 - The response prefix (`YourName:` added automatically)
 

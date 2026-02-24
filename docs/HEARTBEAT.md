@@ -23,13 +23,13 @@ G2 runs three independent polling loops that coordinate container execution:
                   (Claude Agent SDK)
 ```
 
-All three loops use `startPollLoop()` (`src/poll-loop.ts`) — a shared abstraction that handles error logging, duplicate-start prevention, and graceful stop.
+All three loops use `startPollLoop()` (`src/infrastructure/poll-loop.ts`) — a shared abstraction that handles error logging, duplicate-start prevention, and graceful stop.
 
 ---
 
 ## Loop 1: Message Loop
 
-**File:** `src/message-processor.ts` — `MessageProcessor.startPolling()`
+**File:** `src/messaging/MessagePoller.ts` — `MessagePoller.startPolling()`
 **Interval:** `POLL_INTERVAL` = 2 seconds
 
 Polls SQLite for new incoming messages across all registered groups.
@@ -65,7 +65,7 @@ On error before output was sent to the user, `lastAgentTimestamp` is rolled back
 
 ## Loop 2: Scheduler Loop
 
-**File:** `src/task-scheduler.ts` — `startSchedulerLoop()`
+**File:** `src/scheduling/TaskScheduler.ts` — `startSchedulerLoop()`
 **Interval:** `SCHEDULER_POLL_INTERVAL` = 60 seconds
 
 Polls SQLite for scheduled tasks that are due for execution.
@@ -119,7 +119,7 @@ When the queue runs the task:
 
 ## Loop 3: IPC Watcher
 
-**File:** `src/ipc.ts` — `startIpcWatcher()`
+**File:** `src/ipc/IpcWatcher.ts` — `startIpcWatcher()`
 **Primary:** `fs.watch()` with `{ recursive: true }` on `data/ipc/`
 **Fallback:** 10-second poll interval
 
@@ -176,7 +176,7 @@ A `processing` flag prevents overlapping runs from rapid watch events.
 
 ## GroupQueue: Concurrency Control
 
-**File:** `src/group-queue.ts`
+**File:** `src/execution/ExecutionQueue.ts`
 
 All three loops feed work into `GroupQueue`, which enforces per-group ordering and a global container limit.
 
@@ -225,7 +225,7 @@ When a container finishes (`runForGroup` or `runTask` completes):
 
 ### IPC transport
 
-`GroupQueue` delegates file-based IPC to `IpcTransport` (`src/ipc-transport.ts`):
+`GroupQueue` delegates file-based IPC to `IpcTransport` (`src/ipc/IpcTransport.ts`):
 
 - `sendMessage(groupFolder, text)` — Atomic write (tmp + rename) of a JSON file to the container's input directory
 - `closeStdin(groupFolder)` — Writes a `_close` sentinel file to signal the container to exit
@@ -297,7 +297,7 @@ Container writes cancel_task IPC -> IPC Watcher -> CancelTaskHandler
 
 ## Idle Timer
 
-**File:** `src/idle-timer.ts`
+**File:** `src/infrastructure/idle-timer.ts`
 
 Both the message loop and scheduler use the same `createIdleTimer()` utility to prevent zombie containers.
 
@@ -309,7 +309,7 @@ Both the message loop and scheduler use the same `createIdleTimer()` utility to 
 
 ## Startup Recovery
 
-**File:** `src/message-processor.ts` — `MessageProcessor.recoverPendingMessages()`
+**File:** `src/messaging/MessagePoller.ts` — `MessagePoller.recoverPendingMessages()`
 
 On startup, G2 checks for messages that were "seen" (cursor advanced) but never processed (container crashed before completion):
 
@@ -356,7 +356,7 @@ This handles the crash window between advancing `lastTimestamp` and completing a
 
 ## Timing Configuration
 
-**File:** `src/config.ts`
+**File:** `src/infrastructure/Config.ts`
 
 | Constant | Default | Env Override | Purpose |
 |----------|---------|-------------|---------|
@@ -372,7 +372,7 @@ This handles the crash window between advancing `lastTimestamp` and completing a
 
 ## Authorization
 
-**File:** `src/authorization.ts`
+**File:** `src/groups/Authorization.ts`
 
 All task operations are gated by authorization context `{ sourceGroup, isMain }`:
 
@@ -389,16 +389,16 @@ All task operations are gated by authorization context `{ sourceGroup, isMain }`
 
 | File | Purpose |
 |------|---------|
-| `src/poll-loop.ts` | `startPollLoop()` — shared loop abstraction |
-| `src/idle-timer.ts` | `createIdleTimer()` — shared idle timer |
-| `src/ipc-transport.ts` | `IpcTransport` — file-based IPC write operations |
-| `src/task-snapshots.ts` | `refreshTasksSnapshot()` — write task list for containers |
-| `src/task-scheduler.ts` | Scheduler loop and `runTask()` execution |
-| `src/ipc.ts` | IPC watcher (fs.watch + fallback poll) |
-| `src/ipc-handlers/` | Individual IPC command handlers |
-| `src/group-queue.ts` | Concurrency queue with per-group state |
-| `src/message-processor.ts` | `MessageProcessor` — message polling, cursor management, trigger checking |
-| `src/agent-executor.ts` | `AgentExecutor` — container execution, session tracking, snapshot writing |
-| `src/db.ts` | Composition root delegating to `src/repositories/` for DB operations |
-| `src/config.ts` | Timing constants and timezone resolution |
-| `src/authorization.ts` | Permission checks for task operations |
+| `src/infrastructure/poll-loop.ts` | `startPollLoop()` — shared loop abstraction |
+| `src/infrastructure/idle-timer.ts` | `createIdleTimer()` — shared idle timer |
+| `src/ipc/IpcTransport.ts` | `IpcTransport` — file-based IPC write operations |
+| `src/scheduling/SnapshotWriter.ts` | `refreshTasksSnapshot()` — write task list for containers |
+| `src/scheduling/TaskScheduler.ts` | Scheduler loop and `runTask()` execution |
+| `src/ipc/IpcWatcher.ts` | IPC watcher (fs.watch + fallback poll) |
+| `src/ipc/handlers/` | Consolidated IPC command handlers |
+| `src/execution/ExecutionQueue.ts` | Concurrency queue with per-group state |
+| `src/messaging/MessagePoller.ts` | `MessagePoller` — message polling, cursor management, trigger checking |
+| `src/execution/AgentExecutor.ts` | `AgentExecutor` — container execution, session tracking, snapshot writing |
+| `src/infrastructure/Database.ts` | Schema, migrations, DB init logic |
+| `src/infrastructure/Config.ts` | Timing constants and timezone resolution |
+| `src/groups/Authorization.ts` | Permission checks for task operations |

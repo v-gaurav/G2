@@ -88,7 +88,7 @@ The `.claude/` directory is **not** one session per group. Every session that ha
 
 ### How sessions are mounted
 
-`DefaultMountFactory` (`src/interfaces/default-mount-factory.ts`) mounts the group's `.claude/` directory into the container:
+`MountBuilder` (`src/execution/MountBuilder.ts`) mounts the group's `.claude/` directory into the container:
 
 ```
 Host: data/sessions/{group}/.claude/
@@ -152,7 +152,7 @@ CREATE INDEX idx_archives_group ON conversation_archives(group_folder);
 
 Stores archived conversations with both the session UUID (for resuming) and the full transcript content (for searching). Used by `list_sessions`, `search_sessions`, and `resume_session`.
 
-### `SessionManager` (`src/session-manager.ts`)
+### `SessionManager` (`src/sessions/SessionManager.ts`)
 
 In-memory cache backed by SQLite. Provides:
 
@@ -164,7 +164,7 @@ In-memory cache backed by SQLite. Provides:
 | `getAll()` | Return all active sessions |
 | `loadFromDb()` | Load all sessions from DB into memory |
 
-### Database accessor functions (`src/db.ts`)
+### Database accessor functions (`src/infrastructure/Database.ts`)
 
 | Function | Purpose |
 |---|---|
@@ -317,15 +317,11 @@ Main group doesn't need this mount since it has direct access to the entire proj
 
 | File | Layer | Purpose |
 |---|---|---|
-| `src/session-manager.ts` | 2 | In-memory + SQLite session pointer management |
-| `src/db.ts` | 2 | SQLite schema and accessors for sessions/archives |
-| `src/ipc-handlers/archive-utils.ts` | — | Shared transcript parsing and formatting |
-| `src/ipc-handlers/clear-session.ts` | 2 | Archive session + transcript to conversation_archives |
-| `src/ipc-handlers/resume-session.ts` | 2 | Restore session pointer from archives |
-| `src/ipc-handlers/search-sessions.ts` | 2 | IPC round-trip handler for search_sessions |
-| `src/ipc-handlers/archive-session.ts` | 2 | IPC handler for PreCompact archive writes |
-| `src/interfaces/default-mount-factory.ts` | 1 | Mount `.claude/` directory, init settings, sync skills |
-| `src/container-runner.ts` | 1, 2 | Write session history snapshot, capture newSessionId |
+| `src/sessions/SessionManager.ts` | 2 | In-memory + SQLite session pointer management |
+| `src/sessions/SessionRepository.ts` | 2 | SQLite accessors for sessions/archives |
+| `src/ipc/handlers/SessionHandlers.ts` | 2 | IPC handlers for clear/resume/search/archive session |
+| `src/execution/MountBuilder.ts` | 1 | Mount `.claude/` directory, init settings, sync skills |
+| `src/execution/ContainerRunner.ts` | 1, 2 | Write session history snapshot, capture newSessionId |
 | `container/agent-runner/src/index.ts` | 1 | SDK query with resume, PreCompact hook (writes IPC) |
 | `container/agent-runner/src/ipc-mcp-stdio.ts` | — | MCP tools: clear/list/resume/search session |
 | `groups/{group}/CLAUDE.md` | — | Per-group instructions (references search_sessions) |

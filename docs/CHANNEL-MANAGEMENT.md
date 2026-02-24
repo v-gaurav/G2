@@ -63,7 +63,7 @@ Channels are passive — they receive messages via platform-specific listeners a
 
 ## Channel Registry
 
-`src/channel-registry.ts` — the central routing hub for all channels.
+`src/messaging/ChannelRegistry.ts` — the central routing hub for all channels.
 
 ### Registration
 
@@ -105,7 +105,7 @@ The registry routes outbound messages to the correct channel by asking each chan
 
 The channel listens for platform-specific events and translates them into the common `NewMessage` type.
 
-**WhatsApp example** (`src/channels/whatsapp.ts:92-143`):
+**WhatsApp example** (`src/messaging/whatsapp/WhatsAppChannel.ts`):
 
 1. Baileys emits `messages.upsert` event
 2. Channel filters out empty messages and status broadcasts
@@ -127,7 +127,7 @@ Messages are stored in the `messages` table, chat metadata in the `chats` table.
 
 ### Step 3: Polling Loop → Container
 
-`MessageProcessor.startPolling()` (in `src/message-processor.ts`) runs every `POLL_INTERVAL` (2s):
+`MessagePoller.startPolling()` (in `src/messaging/MessagePoller.ts`) runs every `POLL_INTERVAL` (2s):
 
 1. `getNewMessages()` fetches messages since `lastTimestamp`
 2. Deduplicates by group (one container per group per cycle)
@@ -164,7 +164,7 @@ The agent calls the `send_message` MCP tool, which writes a JSON file to `/works
 
 ### Step 2: IPC → Authorization
 
-The host's IPC watcher (`src/ipc.ts`) detects the file and checks authorization (`src/authorization.ts`):
+The host's IPC watcher (`src/ipc/IpcWatcher.ts`) detects the file and checks authorization (`src/groups/Authorization.ts`):
 
 | Caller | Can send to own group | Can send to other groups |
 |--------|----------------------|-------------------------|
@@ -184,20 +184,20 @@ The registry finds the correct channel by JID pattern. The channel handles platf
 
 ### Step 4: Outbound Formatting
 
-`src/message-formatter.ts` (re-exported via `src/router.ts`) processes agent output before sending:
+`src/messaging/MessageFormatter.ts` processes agent output before sending:
 
 1. `MessageFormatter.stripInternalTags()` — removes `<internal>...</internal>` reasoning blocks
 2. Empty strings after stripping are discarded (no empty messages sent)
 
 ### Task Scheduler Output
 
-Scheduled tasks (`src/task-scheduler.ts`) follow the same outbound path. The scheduler calls `channelRegistry.findConnectedByJid()` to route task output. Scheduled task output is not sent automatically — the agent must explicitly use `send_message`.
+Scheduled tasks (`src/scheduling/TaskScheduler.ts`) follow the same outbound path. The scheduler calls `channelRegistry.findConnectedByJid()` to route task output. Scheduled task output is not sent automatically — the agent must explicitly use `send_message`.
 
 ---
 
 ## WhatsApp Channel
 
-`src/channels/whatsapp.ts` — the primary channel implementation.
+`src/messaging/whatsapp/WhatsAppChannel.ts` — the primary channel implementation.
 
 ### Connection
 
@@ -209,8 +209,8 @@ Scheduled tasks (`src/task-scheduler.ts`) follow the same outbound path. The sch
 
 | Setting | Source | Purpose |
 |---------|--------|---------|
-| `ASSISTANT_NAME` | `.env` / `src/config.ts` | Bot name prefix on shared numbers |
-| `ASSISTANT_HAS_OWN_NUMBER` | `.env` / `src/config.ts` | If `true`, skip name prefix and use `fromMe` for bot detection |
+| `ASSISTANT_NAME` | `.env` / `src/infrastructure/Config.ts` | Bot name prefix on shared numbers |
+| `ASSISTANT_HAS_OWN_NUMBER` | `.env` / `src/infrastructure/Config.ts` | If `true`, skip name prefix and use `fromMe` for bot detection |
 
 ### Bot Message Detection
 
@@ -223,7 +223,7 @@ Two modes depending on phone number setup:
 
 ### LID Translation
 
-WhatsApp uses Legacy IDs (LIDs) for multi-device support. The channel translates LID JIDs to phone JIDs (`src/channels/whatsapp.ts:267-292`):
+WhatsApp uses Legacy IDs (LIDs) for multi-device support. The channel translates LID JIDs to phone JIDs (`src/messaging/whatsapp/WhatsAppChannel.ts`):
 
 1. Check local cache (`lidToPhoneMap`)
 2. Query Baileys' signal repository
@@ -231,7 +231,7 @@ WhatsApp uses Legacy IDs (LIDs) for multi-device support. The channel translates
 
 ### Reconnection
 
-Exponential backoff with jitter (`src/channels/whatsapp.ts:244-265`):
+Exponential backoff with jitter (`src/messaging/whatsapp/WhatsAppChannel.ts`):
 
 | Parameter | Value |
 |-----------|-------|
@@ -250,7 +250,7 @@ Reconnection resets on successful connection. Logged-out status (reason `loggedO
 
 ## Outgoing Message Queue
 
-`src/channels/outgoing-message-queue.ts` — buffers messages when a channel is disconnected.
+`src/messaging/whatsapp/OutgoingMessageQueue.ts` — buffers messages when a channel is disconnected.
 
 ### Behavior
 
@@ -281,7 +281,7 @@ Send failures also trigger queueing — if `sock.sendMessage()` throws, the mess
 
 ## Metadata Synchronization
 
-`src/channels/whatsapp-metadata-sync.ts` — syncs group names from WhatsApp into the database.
+`src/messaging/whatsapp/MetadataSync.ts` — syncs group names from WhatsApp into the database.
 
 ### Timing
 
@@ -307,7 +307,7 @@ Send failures also trigger queueing — if `sock.sendMessage()` throws, the mess
 
 ## Database Schema
 
-Channel-related tables in `store/messages.db` (managed by `src/db.ts`):
+Channel-related tables in `store/messages.db` (managed by `src/infrastructure/Database.ts`):
 
 ### `chats` Table
 
@@ -351,7 +351,7 @@ To add a new messaging platform (e.g., Telegram, Discord):
 
 ### 1. Implement the `Channel` Interface
 
-Create `src/channels/{platform}.ts`:
+Create `src/messaging/{platform}/{Platform}Channel.ts`:
 
 ```typescript
 export class TelegramChannel implements Channel {
@@ -411,7 +411,7 @@ G2 provides skills for adding channels:
 
 ## Graceful Shutdown
 
-On `SIGTERM` or `SIGINT` (`src/orchestrator.ts` — `shutdown()`):
+On `SIGTERM` or `SIGINT` (`src/app.ts` — `shutdown()`):
 
 1. `queue.shutdown(10000)` — drain active containers (10s timeout)
 2. `channelRegistry.disconnectAll()` — disconnect every channel gracefully
@@ -426,16 +426,15 @@ Each channel's `disconnect()` handles platform-specific cleanup (e.g., closing W
 | File | Purpose |
 |------|---------|
 | `src/types.ts` | `Channel` interface, `OnInboundMessage`, `OnChatMetadata` callbacks |
-| `src/channel-registry.ts` | `ChannelRegistry` — registration, JID routing, bulk operations |
-| `src/channels/whatsapp.ts` | `WhatsAppChannel` — Baileys connection, send/receive, LID translation |
-| `src/channels/outgoing-message-queue.ts` | `OutgoingMessageQueue` — FIFO buffer for disconnection resilience |
-| `src/channels/whatsapp-metadata-sync.ts` | `WhatsAppMetadataSync` — group name sync with 24h cache |
-| `src/message-formatter.ts` | `MessageFormatter` — `formatMessages()`, `formatOutbound()`, `stripInternalTags()` |
-| `src/router.ts` | Backward-compatible re-exports (delegates to message-formatter) |
-| `src/authorization.ts` | `AuthorizationPolicy` class for fine-grained IPC auth |
-| `src/db.ts` | Composition root delegating to `src/repositories/` for DB operations |
-| `src/config.ts` | `ASSISTANT_NAME`, `ASSISTANT_HAS_OWN_NUMBER`, `STORE_DIR` |
+| `src/messaging/ChannelRegistry.ts` | `ChannelRegistry` — registration, JID routing, bulk operations |
+| `src/messaging/whatsapp/WhatsAppChannel.ts` | `WhatsAppChannel` — Baileys connection, send/receive, LID translation |
+| `src/messaging/whatsapp/OutgoingMessageQueue.ts` | `OutgoingMessageQueue` — FIFO buffer for disconnection resilience |
+| `src/messaging/whatsapp/MetadataSync.ts` | `WhatsAppMetadataSync` — group name sync with 24h cache |
+| `src/messaging/MessageFormatter.ts` | `MessageFormatter` — `formatMessages()`, `formatOutbound()`, `stripInternalTags()` |
+| `src/groups/Authorization.ts` | `AuthorizationPolicy` class for fine-grained IPC auth |
+| `src/infrastructure/Database.ts` | Schema, migrations, DB init logic |
+| `src/infrastructure/Config.ts` | `ASSISTANT_NAME`, `ASSISTANT_HAS_OWN_NUMBER`, `STORE_DIR` |
 | `src/index.ts` | Entry point: channel setup, callback wiring, `main()` bootstrap |
-| `src/orchestrator.ts` | `Orchestrator` — composes services, wires subsystems, shutdown |
-| `src/message-processor.ts` | `MessageProcessor` — message polling, cursor management, trigger checking |
-| `src/agent-executor.ts` | `AgentExecutor` — container execution, session tracking, snapshot writing |
+| `src/app.ts` | `App` — composes services, wires subsystems, shutdown |
+| `src/messaging/MessagePoller.ts` | `MessagePoller` — message polling, cursor management, trigger checking |
+| `src/execution/AgentExecutor.ts` | `AgentExecutor` — container execution, session tracking, snapshot writing |

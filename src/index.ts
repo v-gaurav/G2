@@ -1,7 +1,7 @@
-import { WhatsAppChannel } from './channels/whatsapp.js';
-import { database } from './db.js';
-import { logger } from './logger.js';
-import { Orchestrator } from './orchestrator.js';
+import { WhatsAppChannel } from './messaging/whatsapp/WhatsAppChannel.js';
+import { database } from './infrastructure/Database.js';
+import { logger } from './infrastructure/Logger.js';
+import { Orchestrator } from './app.js';
 import type { NewMessage } from './types.js';
 
 // Singleton orchestrator instance for the process
@@ -9,7 +9,7 @@ const orchestrator = new Orchestrator();
 
 // --- Exports for tests and subsystems ---
 
-export { Orchestrator } from './orchestrator.js';
+export { Orchestrator } from './app.js';
 
 export function getAvailableGroups() {
   return orchestrator.getAvailableGroups();
@@ -27,9 +27,9 @@ export function _setRegisteredGroups(
 async function main(): Promise<void> {
   // Channel callbacks (shared by all channels)
   const channelOpts = {
-    onMessage: (_chatJid: string, msg: NewMessage) => database.storeMessage(msg),
+    onMessage: (_chatJid: string, msg: NewMessage) => database.messageRepo.storeMessage(msg),
     onChatMetadata: (chatJid: string, timestamp: string, name?: string, channel?: string, isGroup?: boolean) =>
-      database.storeChatMetadata(chatJid, timestamp, name, channel, isGroup),
+      database.chatRepo.storeChatMetadata(chatJid, timestamp, name, channel, isGroup),
     registeredGroups: () => orchestrator.getRegisteredGroups(),
   };
 

@@ -139,23 +139,21 @@ Single Node.js process. Agents execute in isolated Linux containers with mounted
 
 Key files:
 - `src/index.ts` - Entry point: channel setup, `main()` bootstrap
-- `src/orchestrator.ts` - Orchestrator class: composes services, wires subsystems
-- `src/message-processor.ts` - Message polling, cursor management, trigger checking
-- `src/agent-executor.ts` - Container execution, session tracking, snapshot writing
-- `src/channels/whatsapp.ts` - WhatsApp connection, auth, send/receive
-- `src/channel-registry.ts` - Registry pattern for multiple channels
-- `src/container-runner.ts` - Spawns streaming agent containers
-- `src/container-runtime.ts` - Docker runtime abstraction
-- `src/interfaces/` - Composable interfaces (`IContainerRuntime`, `IMountFactory`, `IMessageStore`)
-- `src/ipc.ts` - IPC watcher; `src/ipc-handlers/` - Modular IPC command handlers
-- `src/group-queue.ts` - Per-group queue with global concurrency limit
-- `src/task-scheduler.ts` - Runs scheduled tasks
-- `src/session-manager.ts` - Claude Agent SDK session management
-- `src/message-formatter.ts` - Message format transforms (XML, internal tags)
-- `src/router.ts` - Backward-compatible formatting re-exports
-- `src/authorization.ts` - Fine-grained IPC auth
-- `src/mount-security.ts` - Mount allowlist validation
-- `src/db.ts` - Thin composition root; `src/repositories/` - Domain-specific DB repositories
+- `src/app.ts` - App class: composes services, wires subsystems
+- `src/messaging/MessagePoller.ts` - Message polling, cursor management, trigger checking
+- `src/execution/AgentExecutor.ts` - Container execution, session tracking, snapshot writing
+- `src/messaging/whatsapp/WhatsAppChannel.ts` - WhatsApp connection, auth, send/receive
+- `src/messaging/ChannelRegistry.ts` - Registry pattern for multiple channels
+- `src/execution/ContainerRunner.ts` - Spawns streaming agent containers
+- `src/execution/ContainerRuntime.ts` - Docker runtime abstraction and `IContainerRuntime` interface
+- `src/ipc/IpcWatcher.ts` - IPC watcher; `src/ipc/handlers/` - Consolidated IPC command handlers
+- `src/execution/ExecutionQueue.ts` - Per-group queue with global concurrency limit
+- `src/scheduling/TaskScheduler.ts` - Runs scheduled tasks
+- `src/sessions/SessionManager.ts` - Claude Agent SDK session management
+- `src/messaging/MessageFormatter.ts` - Message format transforms (XML, internal tags)
+- `src/groups/Authorization.ts` - Fine-grained IPC auth
+- `src/execution/MountSecurity.ts` - Mount allowlist validation
+- `src/infrastructure/Database.ts` - Schema, migrations, DB init
 - `groups/*/CLAUDE.md` - Per-group memory
 
 ## FAQ

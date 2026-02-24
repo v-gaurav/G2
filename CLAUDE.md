@@ -12,94 +12,76 @@ Single Node.js process that connects to WhatsApp, routes messages to Claude Agen
 | File | Purpose |
 |------|---------|
 | `src/index.ts` | Entry point: channel setup, `main()` bootstrap |
-| `src/orchestrator.ts` | Orchestrator class: composes services, wires subsystems |
-| `src/message-processor.ts` | Message polling, cursor management, trigger checking |
-| `src/agent-executor.ts` | Container execution, session tracking, snapshot writing |
-| `src/types.ts` | Central type definitions (`Channel`, `RegisteredGroup`, `NewMessage`, etc.) |
-| `src/config.ts` | Trigger pattern, paths, intervals, container settings, `TimeoutConfig` |
-| `src/logger.ts` | Pino logger singleton |
-| `src/db.ts` | Thin composition root delegating to domain repositories |
+| `src/app.ts` | Orchestrator class: composes services, wires subsystems |
+| `src/types.ts` | Barrel re-export of all domain types |
 
-### Repositories (`src/repositories/`)
+### Infrastructure (`src/infrastructure/`)
 | File | Purpose |
 |------|---------|
-| `src/repositories/schema.ts` | Schema creation, migrations, DB init logic |
-| `src/repositories/chat-repository.ts` | Chat metadata CRUD |
-| `src/repositories/message-repository.ts` | Message storage and retrieval |
-| `src/repositories/task-repository.ts` | Scheduled task CRUD, claiming, run logging |
-| `src/repositories/session-repository.ts` | Agent session + conversation archive persistence |
-| `src/repositories/group-repository.ts` | Registered group persistence |
-| `src/repositories/state-repository.ts` | Router state (key-value) persistence |
+| `src/infrastructure/Config.ts` | Trigger pattern, paths, intervals, container settings, `TimeoutConfig`, `.env` parsing |
+| `src/infrastructure/Database.ts` | Schema creation, migrations, `AppDatabase` composition root |
+| `src/infrastructure/Logger.ts` | Pino logger singleton |
+| `src/infrastructure/StateRepository.ts` | Router state (key-value) persistence |
+| `src/infrastructure/poll-loop.ts` | Shared polling loop abstraction |
+| `src/infrastructure/idle-timer.ts` | Shared idle timer utility |
 
-### Channels & Routing
+### Messaging (`src/messaging/`)
 | File | Purpose |
 |------|---------|
-| `src/channels/whatsapp.ts` | WhatsApp connection, auth, send/receive |
-| `src/channels/whatsapp-metadata-sync.ts` | WhatsApp group metadata syncing |
-| `src/channels/outgoing-message-queue.ts` | Rate-limited outbound message queue |
-| `src/channel-registry.ts` | Registry pattern for multiple channels |
-| `src/message-formatter.ts` | Message format transforms (XML encoding, internal tag stripping) |
-| `src/router.ts` | Backward-compatible re-exports (delegates to message-formatter) |
+| `src/messaging/types.ts` | `Channel`, `OnInboundMessage`, `OnChatMetadata`, `NewMessage` |
+| `src/messaging/MessagePoller.ts` | Message polling, cursor management, trigger checking |
+| `src/messaging/MessageFormatter.ts` | Message format transforms (XML encoding, internal tag stripping) |
+| `src/messaging/MessageRepository.ts` | Message + chat metadata storage and retrieval |
+| `src/messaging/ChannelRegistry.ts` | Registry pattern for multiple channels |
+| `src/messaging/whatsapp/WhatsAppChannel.ts` | WhatsApp connection, auth, send/receive |
+| `src/messaging/whatsapp/MetadataSync.ts` | WhatsApp group metadata syncing |
+| `src/messaging/whatsapp/OutgoingMessageQueue.ts` | Rate-limited outbound message queue |
 
-### Container & Execution
+### Execution (`src/execution/`)
 | File | Purpose |
 |------|---------|
-| `src/container-runner.ts` | `ContainerRunner` class: spawns agent containers, parses output |
-| `src/container-output-parser.ts` | Stateful parser for OUTPUT_START/END marker protocol |
-| `src/snapshot-writer.ts` | `SnapshotWriter`: writes tasks, sessions, groups snapshots for containers |
-| `src/group-queue.ts` | Per-group queue with global concurrency limit |
-| `src/task-manager.ts` | `TaskManager`: centralized task lifecycle (create, pause, resume, cancel, schedule) |
-| `src/task-scheduler.ts` | Runs scheduled tasks via `TaskManager` |
-| `src/session-manager.ts` | `SessionManager`: session + archive lifecycle (clear, resume, search) |
-| `src/group-paths.ts` | Centralized path construction for group directories |
-| `src/poll-loop.ts` | Shared polling loop abstraction |
-| `src/idle-timer.ts` | Shared idle timer utility |
-| `src/ipc-transport.ts` | File-based IPC write operations |
+| `src/execution/AgentExecutor.ts` | Container execution, session tracking, snapshot writing |
+| `src/execution/ContainerRunner.ts` | `ContainerRunner`: spawns agent containers, parses output |
+| `src/execution/ContainerOutputParser.ts` | Stateful parser for OUTPUT_START/END marker protocol |
+| `src/execution/ContainerRuntime.ts` | `IContainerRuntime` interface + `DockerRuntime` implementation |
+| `src/execution/ExecutionQueue.ts` | Per-group queue with global concurrency limit |
+| `src/execution/MountBuilder.ts` | `IMountFactory` interface + `DefaultMountFactory` implementation |
+| `src/execution/MountSecurity.ts` | Mount allowlist validation for containers |
 
-### IPC Handlers (`src/ipc-handlers/`)
+### Sessions (`src/sessions/`)
 | File | Purpose |
 |------|---------|
-| `src/ipc-watcher.ts` | `IpcWatcher` class: fs.watch + fallback poll, dispatches IPC commands |
-| `src/ipc.ts` | Thin re-export layer: `startIpcWatcher()`, `processTaskIpc()` wrappers |
-| `src/ipc-handlers/index.ts` | Exports all handlers |
-| `src/ipc-handlers/types.ts` | `IpcCommandHandler` interface |
-| `src/ipc-handlers/dispatcher.ts` | Routes IPC commands to handlers |
-| `src/ipc-handlers/schedule-task.ts` | Handle `schedule_task` IPC command |
-| `src/ipc-handlers/register-group.ts` | Handle `register_group` IPC command |
-| `src/ipc-handlers/pause-task.ts` | Handle `pause_task` IPC command |
-| `src/ipc-handlers/resume-task.ts` | Handle `resume_task` IPC command |
-| `src/ipc-handlers/cancel-task.ts` | Handle `cancel_task` IPC command |
-| `src/ipc-handlers/clear-session.ts` | Handle `clear_session` IPC command |
-| `src/ipc-handlers/resume-session.ts` | Handle `resume_session` IPC command |
-| `src/ipc-handlers/search-sessions.ts` | Handle `search_sessions` IPC command (round-trip) |
-| `src/ipc-handlers/archive-session.ts` | Handle `archive_session` IPC command (PreCompact) |
-| `src/ipc-handlers/archive-utils.ts` | Shared transcript parsing and formatting |
-| `src/ipc-handlers/refresh-groups.ts` | Handle `refresh_groups` IPC command |
-| `src/ipc-handlers/base-handler.ts` | Base class for IPC handlers (validation, context) |
+| `src/sessions/types.ts` | `ArchivedSession` |
+| `src/sessions/SessionManager.ts` | Session + archive lifecycle (clear, resume, search), transcript formatting |
+| `src/sessions/SessionRepository.ts` | Session + conversation archive persistence |
 
-### Interfaces (`src/interfaces/`)
+### Scheduling (`src/scheduling/`)
 | File | Purpose |
 |------|---------|
-| `src/interfaces/index.ts` | Exports all interfaces and implementations |
-| `src/interfaces/container-runtime.ts` | `IContainerRuntime` interface |
-| `src/interfaces/docker-runtime.ts` | Docker implementation of `IContainerRuntime` (self-contained) |
-| `src/interfaces/mount-factory.ts` | `IMountFactory` interface (`prepare()` + `buildMounts()`) |
-| `src/interfaces/default-mount-factory.ts` | Default mount builder (prepare creates dirs, buildMounts is pure) |
-| `src/interfaces/message-store.ts` | `IMessageStore` interface |
-| `src/interfaces/sqlite-message-store.ts` | SQLite implementation of `IMessageStore` |
+| `src/scheduling/types.ts` | `ScheduledTask`, `TaskRunLog` |
+| `src/scheduling/TaskService.ts` | `TaskManager`: centralized task lifecycle (create, pause, resume, cancel) |
+| `src/scheduling/TaskScheduler.ts` | Runs scheduled tasks via `TaskManager` |
+| `src/scheduling/TaskRepository.ts` | Scheduled task CRUD, claiming, run logging |
+| `src/scheduling/SnapshotWriter.ts` | Writes tasks, sessions, groups snapshots for containers |
 
-### Security & Validation
+### Groups (`src/groups/`)
 | File | Purpose |
 |------|---------|
-| `src/authorization.ts` | Fine-grained auth (`AuthorizationPolicy` class) |
-| `src/mount-security.ts` | Mount allowlist validation for containers |
-| `src/trigger-validator.ts` | Trigger pattern matching for non-main groups |
-| `src/env.ts` | Secure `.env` file parsing |
+| `src/groups/types.ts` | `RegisteredGroup`, `ContainerConfig`, `AdditionalMount`, `MountAllowlist`, `AllowedRoot` |
+| `src/groups/Authorization.ts` | Fine-grained auth (`AuthorizationPolicy` class) |
+| `src/groups/GroupPaths.ts` | Centralized path construction for group directories |
+| `src/groups/GroupRepository.ts` | Registered group persistence |
 
-### Utilities
+### IPC (`src/ipc/`)
 | File | Purpose |
 |------|---------|
-| `src/safe-parse.ts` | Safe JSON parsing (returns null on failure) |
+| `src/ipc/types.ts` | `IpcCommandHandler` interface |
+| `src/ipc/IpcWatcher.ts` | `IpcWatcher`: fs.watch + fallback poll, dispatches IPC commands |
+| `src/ipc/IpcDispatcher.ts` | Routes IPC commands to handlers, `BaseIpcHandler` base class |
+| `src/ipc/IpcTransport.ts` | File-based IPC write operations |
+| `src/ipc/handlers/TaskHandlers.ts` | `schedule_task`, `pause_task`, `resume_task`, `cancel_task` handlers |
+| `src/ipc/handlers/SessionHandlers.ts` | `clear_session`, `resume_session`, `search_sessions`, `archive_session` handlers |
+| `src/ipc/handlers/GroupHandlers.ts` | `register_group`, `refresh_groups` handlers |
 
 ### Other
 | File | Purpose |

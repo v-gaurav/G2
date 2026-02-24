@@ -45,7 +45,7 @@ Channels implement the `Channel` interface (`connect`, `sendMessage`, `isConnect
 
 ### 2. Message Loop
 
-`MessageProcessor.startPolling()` in `src/message-processor.ts` runs every `POLL_INTERVAL` (2s):
+`MessageProcessor.startPolling()` in `src/messaging/MessagePoller.ts` runs every `POLL_INTERVAL` (2s):
 
 1. `getNewMessages()` fetches messages since `lastTimestamp` from SQLite
 2. Deduplicates by group (one container invocation per group per cycle)
@@ -174,7 +174,7 @@ File-based IPC through bind-mounted directories. The host uses `fs.watch()` with
 | `search_sessions` | Own session (main: any) | Query archived sessions |
 | `archive_session` | Own session (main: any) | Archive current transcript |
 
-Commands are dispatched by `IpcCommandDispatcher` to modular handlers in `src/ipc-handlers/`.
+Commands are dispatched by `IpcCommandDispatcher` to modular handlers in `src/ipc/handlers/`.
 
 The agent exposes these commands as MCP tools via `ipc-mcp-stdio.ts` (runs as subprocess under agent).
 
@@ -216,7 +216,7 @@ Scheduled task output is not sent to users automatically — the agent must use 
 
 ### 9. Authorization
 
-Role-based authorization enforced at every IPC boundary (`src/authorization.ts`). The `AuthorizationPolicy` class encapsulates checks for a single source context.
+Role-based authorization enforced at every IPC boundary (`src/groups/Authorization.ts`). The `AuthorizationPolicy` class encapsulates checks for a single source context.
 
 | Operation | Main Group | Non-Main Group |
 |---|---|---|
@@ -240,7 +240,7 @@ Auth context: `{ sourceGroup: string, isMain: boolean }`
 
 ### 11. Data Persistence
 
-SQLite database (`store/messages.db`). Containers have no direct DB access — all data flows through the host. `AppDatabase` in `src/db.ts` is a thin composition root that delegates to domain repositories in `src/repositories/` (chat, message, task, session, archive, group, state).
+SQLite database (`store/messages.db`). Containers have no direct DB access — all data flows through the host. `AppDatabase` in `src/infrastructure/Database.ts` is a thin composition root that delegates to domain-specific repositories (chat, message, task, session, group, state).
 
 | Table | Purpose |
 |---|---|
@@ -265,7 +265,7 @@ main() [src/index.ts]
   2. orchestrator.addChannel(whatsapp)
   3. orchestrator.start()
 
-Orchestrator.start() [src/orchestrator.ts]
+Orchestrator.start() [src/app.ts]
   1. ensureContainerSystemRunning()     — verify Docker, clean orphan containers
   2. initDatabase()                     — create/migrate SQLite
   3. Load sessions and registered groups from DB
@@ -288,7 +288,7 @@ Orchestrator.start() [src/orchestrator.ts]
 
 ## Output Processing
 
-Agent output flows through `src/message-formatter.ts` (re-exported via `src/router.ts` for backward compatibility):
+Agent output flows through `src/messaging/MessageFormatter.ts`:
 - `MessageFormatter.formatOutbound()` strips `<internal>...</internal>` tags (agent reasoning hidden from users)
 - `MessageFormatter.escapeXml()` prevents XML injection in inbound message formatting
 - Empty strings after stripping are discarded (no empty messages sent)
@@ -306,6 +306,6 @@ Agent output flows through `src/message-formatter.ts` (re-exported via `src/rout
 | Channel abstraction | `Channel` interface + `ChannelRegistry` for pluggable transports |
 | File-based IPC | Atomic JSON file writes, `fs.watch` + fallback poll, no sockets |
 | Composed services | `AgentExecutor` (container execution), `MessageProcessor` (polling + cursors), `Orchestrator` (wiring) |
-| Repository pattern | `src/repositories/` — domain-specific DB classes behind `AppDatabase` composition root |
-| Shared utilities | `startPollLoop`, `createIdleTimer`, `IpcTransport`, `refreshTasksSnapshot`, `GroupPaths`, `safeParse` |
+| Repository pattern | Domain-specific DB classes behind `AppDatabase` composition root |
+| Shared utilities | `startPollLoop`, `createIdleTimer`, `IpcTransport`, `refreshTasksSnapshot`, `GroupPaths` |
 | Untrusted containers | Host validates every IPC command before acting |

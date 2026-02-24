@@ -90,20 +90,20 @@ A personal Claude assistant accessible via WhatsApp, with minimal custom code.
 
 The codebase uses composable, interface-driven design:
 
-- **Interface abstractions** — Core behaviors are defined as interfaces (`IContainerRuntime`, `IMountFactory`, `IMessageStore`), decoupling consumers from implementations. Swapping Docker for Apple Container means providing a different `IContainerRuntime`.
-- **Dependency injection** — Modules accept their dependencies as constructor/function parameters with sensible defaults. `container-runner` accepts optional `runtime` and `mountFactory`, making it testable with mocks and swappable at runtime.
+- **Interface abstractions** — Core behaviors are defined as interfaces (`IContainerRuntime`, `IMountFactory`), decoupling consumers from implementations. Swapping Docker for Apple Container means providing a different `IContainerRuntime`.
+- **Dependency injection** — Modules accept their dependencies as constructor/function parameters with sensible defaults. `ContainerRunner` accepts optional `runtime` and `mountFactory`, making it testable with mocks and swappable at runtime.
 - **Registry pattern** — `ChannelRegistry` manages multiple communication channels. Channels implement the `Channel` interface and register themselves; the orchestrator routes messages by asking the registry which channel owns a given JID.
-- **Command dispatcher** — IPC commands from containers are handled by an `IpcCommandDispatcher` that routes to modular `IpcCommandHandler` implementations (one per command type: `schedule-task`, `register-group`, `pause-task`, etc.). Adding a new IPC command means adding one handler file.
+- **Command dispatcher** — IPC commands from containers are handled by an `IpcDispatcher` that routes to modular `IpcCommandHandler` implementations organized in consolidated handler files (`src/ipc/handlers/`). Adding a new IPC command means adding a handler to the appropriate domain handler file.
 - **Manager classes** — `SessionManager` encapsulates Claude Agent SDK session state with an in-memory cache backed by SQLite persistence.
-- **Repository pattern** — Database operations are split into domain-specific repository classes in `src/repositories/` (chat, message, task, session, archive, group, state). `AppDatabase` in `src/db.ts` is a thin composition root that instantiates all repositories and delegates method calls, preserving backward-compatible function exports.
-- **Composed services** — The `Orchestrator` composes `MessageProcessor` (message polling, cursor management, trigger checking) and `AgentExecutor` (container execution, session tracking, snapshot writing) rather than implementing all logic inline. Each service owns its specific state and concerns.
-- **Authorization as a policy class** — `authorization.ts` exports an `AuthorizationPolicy` class that encapsulates checks for a single `AuthContext` (`canSendMessage`, `canScheduleTask`, `canRegisterGroup`, etc.). No side effects, trivially testable.
-- **Single responsibility modules** — Each concern has its own module: trigger validation (`trigger-validator`), mount security (`mount-security`), timeout configuration (`TimeoutConfig` in `config`), secure env parsing (`env`), outbound message rate limiting (`outgoing-message-queue`), message formatting (`message-formatter`), path construction (`group-paths`), safe JSON parsing (`safe-parse`).
+- **Repository pattern** — Database operations are split into domain-specific repository classes co-located with their domain modules (e.g., `src/messaging/MessageRepository.ts`, `src/scheduling/TaskRepository.ts`, `src/sessions/SessionRepository.ts`, `src/groups/GroupRepository.ts`, `src/infrastructure/StateRepository.ts`).
+- **Composed services** — The `App` composes `MessagePoller` (message polling, cursor management, trigger checking) and `AgentExecutor` (container execution, session tracking, snapshot writing) rather than implementing all logic inline. Each service owns its specific state and concerns.
+- **Authorization as a policy class** — `Authorization.ts` exports an `AuthorizationPolicy` class that encapsulates checks for a single `AuthContext` (`canSendMessage`, `canScheduleTask`, `canRegisterGroup`, etc.). No side effects, trivially testable.
+- **Single responsibility modules** — Each concern has its own module: mount security (`MountSecurity`), timeout configuration (`TimeoutConfig` in `Config`), outbound message rate limiting (`OutgoingMessageQueue`), message formatting (`MessageFormatter`), path construction (`GroupPaths`).
 
 ### Message Routing
 - Channels implement the `Channel` interface and register with `ChannelRegistry`
 - Only messages from registered groups are processed
-- Trigger matching is handled by `trigger-validator` — `@G2` prefix (case insensitive), configurable via `ASSISTANT_NAME` env var
+- Trigger matching is handled by `MessagePoller` — `@G2` prefix (case insensitive), configurable via `ASSISTANT_NAME` env var
 - Unregistered groups are ignored completely
 
 ### Memory System
@@ -120,14 +120,14 @@ The codebase uses composable, interface-driven design:
 ### Container Isolation
 - All agents run inside containers (lightweight Linux VMs)
 - Container runtime is abstracted behind `IContainerRuntime`; Docker is the default, Apple Container available via `/convert-to-apple-container`
-- Mount construction is abstracted behind `IMountFactory`; `DefaultMountFactory` builds mounts based on group identity and main/non-main status
-- Mount security is enforced by `mount-security` with an external allowlist at `~/.config/g2/mount-allowlist.json`
+- Mount construction is abstracted behind `IMountFactory`; `MountBuilder` builds mounts based on group identity and main/non-main status
+- Mount security is enforced by `MountSecurity` with an external allowlist at `~/.config/g2/mount-allowlist.json`
 - Containers provide filesystem isolation - agents can only see mounted paths
 - Bash access is safe because commands run inside the container, not on the host
 - Browser automation via agent-browser with Chromium in the container
 
 ### IPC & Scheduled Tasks
-- IPC commands from containers are dispatched by `IpcCommandDispatcher` to modular handlers
+- IPC commands from containers are dispatched by `IpcDispatcher` to modular handlers
 - Users can ask Claude to schedule recurring or one-time tasks from any group
 - Tasks run as full agents in the context of the group that created them
 - Tasks have access to all tools including Bash (safe in container)
@@ -143,7 +143,7 @@ The codebase uses composable, interface-driven design:
 - Groups can have additional directories mounted via `containerConfig`
 
 ### Authorization
-- Fine-grained, per-operation authorization via pure functions in `authorization.ts`
+- Fine-grained, per-operation authorization via pure functions in `src/groups/Authorization.ts`
 - Each IPC operation checks auth before executing: `canSendMessage`, `canScheduleTask`, `canManageTask`, `canRegisterGroup`, `canRefreshGroups`, `canManageSession`
 - Main channel is the admin/control group (typically self-chat) — has full privileges
 - Non-main groups are restricted to their own resources
