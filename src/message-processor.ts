@@ -7,15 +7,11 @@ import {
 import { safeParse } from './safe-parse.js';
 import { AgentExecutor } from './agent-executor.js';
 import { ChannelRegistry } from './channel-registry.js';
-import {
-  getMessagesSince,
-  getNewMessages,
-  getRouterState,
-  setRouterState,
-} from './db.js';
 import { GroupQueue } from './group-queue.js';
 import { createIdleTimer } from './idle-timer.js';
 import { startPollLoop } from './poll-loop.js';
+import { MessageRepository } from './repositories/message-repository.js';
+import { StateRepository } from './repositories/state-repository.js';
 import { formatMessages } from './router.js';
 import { hasTrigger } from './trigger-validator.js';
 import { NewMessage, RegisteredGroup } from './types.js';
@@ -25,16 +21,24 @@ export class MessageProcessor {
   private lastTimestamp = '';
   private lastAgentTimestamp: Record<string, string> = {};
 
+  private stateRepo: StateRepository;
+  private messageRepo: MessageRepository;
+
   constructor(private deps: {
     registeredGroups: () => Record<string, RegisteredGroup>;
     channelRegistry: ChannelRegistry;
     queue: GroupQueue;
     agentExecutor: AgentExecutor;
-  }) {}
+    stateRepo: StateRepository;
+    messageRepo: MessageRepository;
+  }) {
+    this.stateRepo = deps.stateRepo;
+    this.messageRepo = deps.messageRepo;
+  }
 
   loadState(): void {
-    this.lastTimestamp = getRouterState('last_timestamp') || '';
-    const agentTs = getRouterState('last_agent_timestamp');
+    this.lastTimestamp = this.stateRepo.getRouterState('last_timestamp') || '';
+    const agentTs = this.stateRepo.getRouterState('last_agent_timestamp');
     const parsed = agentTs ? safeParse<Record<string, string>>(agentTs) : null;
     if (agentTs && !parsed) {
       logger.warn('Corrupted last_agent_timestamp in DB, resetting');
@@ -43,8 +47,8 @@ export class MessageProcessor {
   }
 
   saveState(): void {
-    setRouterState('last_timestamp', this.lastTimestamp);
-    setRouterState(
+    this.stateRepo.setRouterState('last_timestamp', this.lastTimestamp);
+    this.stateRepo.setRouterState(
       'last_agent_timestamp',
       JSON.stringify(this.lastAgentTimestamp),
     );
@@ -55,7 +59,7 @@ export class MessageProcessor {
 
     return startPollLoop('Message', POLL_INTERVAL, async () => {
       const jids = Object.keys(this.deps.registeredGroups());
-      const { messages, newTimestamp } = getNewMessages(jids, this.lastTimestamp, ASSISTANT_NAME);
+      const { messages, newTimestamp } = this.messageRepo.getNewMessages(jids, this.lastTimestamp, ASSISTANT_NAME);
 
       if (messages.length === 0) return;
 
@@ -97,7 +101,7 @@ export class MessageProcessor {
 
         // Pull all messages since lastAgentTimestamp so non-trigger
         // context that accumulated between triggers is included.
-        const allPending = getMessagesSince(
+        const allPending = this.messageRepo.getMessagesSince(
           chatJid,
           this.lastAgentTimestamp[chatJid] || '',
           ASSISTANT_NAME,
@@ -135,7 +139,7 @@ export class MessageProcessor {
     }
 
     const sinceTimestamp = this.lastAgentTimestamp[chatJid] || '';
-    const missedMessages = getMessagesSince(chatJid, sinceTimestamp, ASSISTANT_NAME);
+    const missedMessages = this.messageRepo.getMessagesSince(chatJid, sinceTimestamp, ASSISTANT_NAME);
 
     if (missedMessages.length === 0) return true;
 
@@ -205,7 +209,7 @@ export class MessageProcessor {
   recoverPendingMessages(): void {
     for (const [chatJid, group] of Object.entries(this.deps.registeredGroups())) {
       const sinceTimestamp = this.lastAgentTimestamp[chatJid] || '';
-      const pending = getMessagesSince(chatJid, sinceTimestamp, ASSISTANT_NAME);
+      const pending = this.messageRepo.getMessagesSince(chatJid, sinceTimestamp, ASSISTANT_NAME);
       if (pending.length === 0) continue;
 
       // For non-main groups, only recover if a trigger is present

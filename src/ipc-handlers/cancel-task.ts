@@ -1,8 +1,6 @@
-import { deleteTask } from '../db.js';
 import { logger } from '../logger.js';
 
 import { BaseIpcHandler, HandlerContext, IpcHandlerError } from './base-handler.js';
-import { getAuthorizedTask } from './task-helpers.js';
 
 interface CancelTaskPayload {
   taskId: string;
@@ -19,8 +17,15 @@ export class CancelTaskHandler extends BaseIpcHandler<CancelTaskPayload> {
   }
 
   async execute(payload: CancelTaskPayload, context: HandlerContext): Promise<void> {
-    getAuthorizedTask(payload.taskId, context.sourceGroup, context.isMain);
-    deleteTask(payload.taskId);
+    try {
+      context.deps.taskManager.getAuthorized(payload.taskId, context.sourceGroup, context.isMain);
+    } catch (err) {
+      throw new IpcHandlerError(err instanceof Error ? err.message : String(err), {
+        taskId: payload.taskId,
+        sourceGroup: context.sourceGroup,
+      });
+    }
+    context.deps.taskManager.cancel(payload.taskId);
     logger.info(
       { taskId: payload.taskId, sourceGroup: context.sourceGroup },
       'Task cancelled via IPC',

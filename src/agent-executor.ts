@@ -1,25 +1,31 @@
 import { MAIN_GROUP_FOLDER } from './config.js';
 import {
   ContainerOutput,
-  runContainerAgent,
-  writeGroupsSnapshot,
-  writeSessionHistorySnapshot,
+  ContainerRunner,
 } from './container-runner.js';
-import type { AvailableGroup } from './container-runner.js';
-import { getConversationArchives } from './db.js';
 import { GroupQueue } from './group-queue.js';
 import { logger } from './logger.js';
 import { SessionManager } from './session-manager.js';
-import { refreshTasksSnapshot } from './task-snapshots.js';
+import { AvailableGroup, SnapshotWriter } from './snapshot-writer.js';
 import { RegisteredGroup } from './types.js';
 
+const defaultContainerRunner = new ContainerRunner();
+
 export class AgentExecutor {
+  private readonly containerRunner: ContainerRunner;
+  private readonly snapshotWriter: SnapshotWriter;
+
   constructor(private deps: {
     sessionManager: SessionManager;
     queue: GroupQueue;
     getAvailableGroups: () => AvailableGroup[];
     getRegisteredGroups: () => Record<string, RegisteredGroup>;
-  }) {}
+    snapshotWriter: SnapshotWriter;
+    containerRunner?: ContainerRunner;
+  }) {
+    this.containerRunner = deps.containerRunner ?? defaultContainerRunner;
+    this.snapshotWriter = deps.snapshotWriter;
+  }
 
   async execute(
     group: RegisteredGroup,
@@ -30,22 +36,14 @@ export class AgentExecutor {
     const isMain = group.folder === MAIN_GROUP_FOLDER;
     const sessionId = this.deps.sessionManager.get(group.folder);
 
-    // Update tasks snapshot for container to read (filtered by group)
-    refreshTasksSnapshot(group.folder, isMain);
-
-    // Update available groups snapshot (main group only can see all groups)
+    // Write all snapshots for the container to read
     const availableGroups = this.deps.getAvailableGroups();
-    writeGroupsSnapshot(
+    const conversationArchives = this.deps.sessionManager.getArchives(group.folder);
+    this.snapshotWriter.prepareForExecution(
       group.folder,
       isMain,
       availableGroups,
       new Set(Object.keys(this.deps.getRegisteredGroups())),
-    );
-
-    // Update session history snapshot for container to read
-    const conversationArchives = getConversationArchives(group.folder);
-    writeSessionHistorySnapshot(
-      group.folder,
       conversationArchives.map((s) => ({
         id: s.id,
         name: s.name,
@@ -65,7 +63,7 @@ export class AgentExecutor {
       : undefined;
 
     try {
-      const output = await runContainerAgent(
+      const output = await this.containerRunner.run(
         group,
         {
           prompt,

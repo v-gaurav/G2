@@ -21,6 +21,7 @@ function makeGroup(overrides: Partial<RegisteredGroup> = {}): RegisteredGroup {
     folder: 'test-group',
     trigger: '^@G2\\b',
     added_at: '2024-01-01T00:00:00.000Z',
+    channel: 'whatsapp',
     ...overrides,
   };
 }

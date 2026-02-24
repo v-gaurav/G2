@@ -1,7 +1,10 @@
 import BetterSqlite3 from 'better-sqlite3';
+import type { ArchivedSession } from '../types.js';
 
 export class SessionRepository {
   constructor(private db: BetterSqlite3.Database) {}
+
+  // --- Active sessions (sessions table) ---
 
   getSession(groupFolder: string): string | undefined {
     const row = this.db
@@ -29,5 +32,50 @@ export class SessionRepository {
       result[row.group_folder] = row.session_id;
     }
     return result;
+  }
+
+  // --- Archives (conversation_archives table) ---
+
+  insertArchive(
+    groupFolder: string,
+    sessionId: string,
+    name: string,
+    content: string,
+    archivedAt: string,
+  ): void {
+    this.db.prepare(
+      `INSERT INTO conversation_archives (group_folder, session_id, name, content, archived_at) VALUES (?, ?, ?, ?, ?)`,
+    ).run(groupFolder, sessionId, name, content, archivedAt);
+  }
+
+  getArchives(
+    groupFolder: string,
+  ): Omit<ArchivedSession, 'content'>[] {
+    return this.db
+      .prepare(
+        'SELECT id, group_folder, session_id, name, archived_at FROM conversation_archives WHERE group_folder = ? ORDER BY archived_at DESC',
+      )
+      .all(groupFolder) as Omit<ArchivedSession, 'content'>[];
+  }
+
+  getArchiveById(id: number): ArchivedSession | undefined {
+    return this.db
+      .prepare('SELECT * FROM conversation_archives WHERE id = ?')
+      .get(id) as ArchivedSession | undefined;
+  }
+
+  searchArchives(
+    groupFolder: string,
+    query: string,
+  ): Omit<ArchivedSession, 'content'>[] {
+    return this.db
+      .prepare(
+        `SELECT id, group_folder, session_id, name, archived_at FROM conversation_archives WHERE group_folder = ? AND content LIKE ? ORDER BY archived_at DESC`,
+      )
+      .all(groupFolder, `%${query}%`) as Omit<ArchivedSession, 'content'>[];
+  }
+
+  deleteArchive(id: number): void {
+    this.db.prepare('DELETE FROM conversation_archives WHERE id = ?').run(id);
   }
 }

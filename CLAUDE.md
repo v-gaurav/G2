@@ -27,8 +27,7 @@ Single Node.js process that connects to WhatsApp, routes messages to Claude Agen
 | `src/repositories/chat-repository.ts` | Chat metadata CRUD |
 | `src/repositories/message-repository.ts` | Message storage and retrieval |
 | `src/repositories/task-repository.ts` | Scheduled task CRUD, claiming, run logging |
-| `src/repositories/session-repository.ts` | Agent session persistence |
-| `src/repositories/archive-repository.ts` | Conversation archive storage and search |
+| `src/repositories/session-repository.ts` | Agent session + conversation archive persistence |
 | `src/repositories/group-repository.ts` | Registered group persistence |
 | `src/repositories/state-repository.ts` | Router state (key-value) persistence |
 
@@ -45,21 +44,23 @@ Single Node.js process that connects to WhatsApp, routes messages to Claude Agen
 ### Container & Execution
 | File | Purpose |
 |------|---------|
-| `src/container-runner.ts` | Spawns agent containers with mounts |
-| `src/container-runtime.ts` | Docker runtime abstraction |
+| `src/container-runner.ts` | `ContainerRunner` class: spawns agent containers, parses output |
+| `src/container-output-parser.ts` | Stateful parser for OUTPUT_START/END marker protocol |
+| `src/snapshot-writer.ts` | `SnapshotWriter`: writes tasks, sessions, groups snapshots for containers |
 | `src/group-queue.ts` | Per-group queue with global concurrency limit |
-| `src/task-scheduler.ts` | Runs scheduled tasks |
-| `src/session-manager.ts` | Claude Agent SDK session management per group |
+| `src/task-manager.ts` | `TaskManager`: centralized task lifecycle (create, pause, resume, cancel, schedule) |
+| `src/task-scheduler.ts` | Runs scheduled tasks via `TaskManager` |
+| `src/session-manager.ts` | `SessionManager`: session + archive lifecycle (clear, resume, search) |
 | `src/group-paths.ts` | Centralized path construction for group directories |
 | `src/poll-loop.ts` | Shared polling loop abstraction |
 | `src/idle-timer.ts` | Shared idle timer utility |
 | `src/ipc-transport.ts` | File-based IPC write operations |
-| `src/task-snapshots.ts` | Task snapshot writing for containers |
 
 ### IPC Handlers (`src/ipc-handlers/`)
 | File | Purpose |
 |------|---------|
-| `src/ipc.ts` | IPC watcher (fs.watch + fallback poll) and task processing |
+| `src/ipc-watcher.ts` | `IpcWatcher` class: fs.watch + fallback poll, dispatches IPC commands |
+| `src/ipc.ts` | Thin re-export layer: `startIpcWatcher()`, `processTaskIpc()` wrappers |
 | `src/ipc-handlers/index.ts` | Exports all handlers |
 | `src/ipc-handlers/types.ts` | `IpcCommandHandler` interface |
 | `src/ipc-handlers/dispatcher.ts` | Routes IPC commands to handlers |
@@ -75,16 +76,15 @@ Single Node.js process that connects to WhatsApp, routes messages to Claude Agen
 | `src/ipc-handlers/archive-utils.ts` | Shared transcript parsing and formatting |
 | `src/ipc-handlers/refresh-groups.ts` | Handle `refresh_groups` IPC command |
 | `src/ipc-handlers/base-handler.ts` | Base class for IPC handlers (validation, context) |
-| `src/ipc-handlers/task-helpers.ts` | Shared task lookup and authorization helper |
 
 ### Interfaces (`src/interfaces/`)
 | File | Purpose |
 |------|---------|
 | `src/interfaces/index.ts` | Exports all interfaces and implementations |
 | `src/interfaces/container-runtime.ts` | `IContainerRuntime` interface |
-| `src/interfaces/docker-runtime.ts` | Docker implementation of `IContainerRuntime` |
-| `src/interfaces/mount-factory.ts` | `IMountFactory` interface |
-| `src/interfaces/default-mount-factory.ts` | Default mount builder (group/main-aware) |
+| `src/interfaces/docker-runtime.ts` | Docker implementation of `IContainerRuntime` (self-contained) |
+| `src/interfaces/mount-factory.ts` | `IMountFactory` interface (`prepare()` + `buildMounts()`) |
+| `src/interfaces/default-mount-factory.ts` | Default mount builder (prepare creates dirs, buildMounts is pure) |
 | `src/interfaces/message-store.ts` | `IMessageStore` interface |
 | `src/interfaces/sqlite-message-store.ts` | SQLite implementation of `IMessageStore` |
 

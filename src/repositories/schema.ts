@@ -133,6 +133,13 @@ export function createSchema(db: BetterSqlite3.Database): void {
   } catch {
     /* columns already exist */
   }
+
+  // Add channel column to registered_groups if it doesn't exist
+  try {
+    db.exec(`ALTER TABLE registered_groups ADD COLUMN channel TEXT DEFAULT 'whatsapp'`);
+  } catch {
+    /* column already exists */
+  }
 }
 
 /**

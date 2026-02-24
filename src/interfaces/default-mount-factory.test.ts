@@ -50,6 +50,7 @@ const testGroup: RegisteredGroup = {
   folder: 'test-group',
   trigger: '@G2',
   added_at: new Date().toISOString(),
+  channel: 'whatsapp',
 };
 
 describe('DefaultMountFactory', () => {
@@ -135,9 +136,9 @@ describe('DefaultMountFactory', () => {
     });
   });
 
-  describe('session directory setup', () => {
+  describe('prepare() side effects', () => {
     it('creates session directory', () => {
-      factory.buildMounts(testGroup, false);
+      factory.prepare(testGroup, false);
       expect(fs.mkdirSync).toHaveBeenCalledWith(
         expect.stringContaining('sessions/test-group/.claude'),
         { recursive: true },
@@ -146,17 +147,15 @@ describe('DefaultMountFactory', () => {
 
     it('writes settings.json when it does not exist', () => {
       vi.mocked(fs.existsSync).mockReturnValue(false);
-      factory.buildMounts(testGroup, false);
+      factory.prepare(testGroup, false);
       expect(fs.writeFileSync).toHaveBeenCalledWith(
         expect.stringContaining('settings.json'),
         expect.stringContaining('CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS'),
       );
     });
-  });
 
-  describe('IPC directory setup', () => {
     it('creates IPC subdirectories', () => {
-      factory.buildMounts(testGroup, false);
+      factory.prepare(testGroup, false);
       expect(fs.mkdirSync).toHaveBeenCalledWith(
         expect.stringContaining('ipc/test-group/messages'),
         { recursive: true },

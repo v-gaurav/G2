@@ -1,5 +1,5 @@
 import { WhatsAppChannel } from './channels/whatsapp.js';
-import { storeChatMetadata, storeMessage } from './db.js';
+import { database } from './db.js';
 import { logger } from './logger.js';
 import { Orchestrator } from './orchestrator.js';
 import type { NewMessage } from './types.js';
@@ -27,9 +27,9 @@ export function _setRegisteredGroups(
 async function main(): Promise<void> {
   // Channel callbacks (shared by all channels)
   const channelOpts = {
-    onMessage: (_chatJid: string, msg: NewMessage) => storeMessage(msg),
+    onMessage: (_chatJid: string, msg: NewMessage) => database.storeMessage(msg),
     onChatMetadata: (chatJid: string, timestamp: string, name?: string, channel?: string, isGroup?: boolean) =>
-      storeChatMetadata(chatJid, timestamp, name, channel, isGroup),
+      database.storeChatMetadata(chatJid, timestamp, name, channel, isGroup),
     registeredGroups: () => orchestrator.getRegisteredGroups(),
   };
 

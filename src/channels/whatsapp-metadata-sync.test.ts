@@ -10,28 +10,31 @@ vi.mock('../logger.js', () => ({
   },
 }));
 
-// Mock db
-vi.mock('../db.js', () => ({
-  getLastGroupSync: vi.fn(() => null),
-  setLastGroupSync: vi.fn(),
-  updateChatName: vi.fn(),
-}));
-
 import { WhatsAppMetadataSync } from './whatsapp-metadata-sync.js';
-import { getLastGroupSync, setLastGroupSync, updateChatName } from '../db.js';
+import type { ChatRepository } from '../repositories/chat-repository.js';
 import { logger } from '../logger.js';
 
 const INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h
 
+function createMockChatRepo() {
+  return {
+    getLastGroupSync: vi.fn(() => null as string | null),
+    setLastGroupSync: vi.fn(),
+    updateChatName: vi.fn(),
+  } as unknown as ChatRepository;
+}
+
+let mockChatRepo: ReturnType<typeof createMockChatRepo>;
+
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(getLastGroupSync).mockReturnValue(null);
+  mockChatRepo = createMockChatRepo();
 });
 
 describe('WhatsAppMetadataSync', () => {
   describe('sync', () => {
     it('fetches groups and updates names in the database', async () => {
-      const sync = new WhatsAppMetadataSync(INTERVAL_MS);
+      const sync = new WhatsAppMetadataSync(INTERVAL_MS, mockChatRepo);
       const fetchGroups = vi.fn().mockResolvedValue({
         'group1@g.us': { subject: 'Group One' },
         'group2@g.us': { subject: 'Group Two' },
@@ -40,17 +43,17 @@ describe('WhatsAppMetadataSync', () => {
       await sync.sync(fetchGroups);
 
       expect(fetchGroups).toHaveBeenCalled();
-      expect(updateChatName).toHaveBeenCalledWith('group1@g.us', 'Group One');
-      expect(updateChatName).toHaveBeenCalledWith('group2@g.us', 'Group Two');
-      expect(setLastGroupSync).toHaveBeenCalled();
+      expect(mockChatRepo.updateChatName).toHaveBeenCalledWith('group1@g.us', 'Group One');
+      expect(mockChatRepo.updateChatName).toHaveBeenCalledWith('group2@g.us', 'Group Two');
+      expect(mockChatRepo.setLastGroupSync).toHaveBeenCalled();
     });
 
     it('skips sync when synced recently', async () => {
-      vi.mocked(getLastGroupSync).mockReturnValue(
+      vi.mocked(mockChatRepo.getLastGroupSync).mockReturnValue(
         new Date(Date.now() - 60 * 60 * 1000).toISOString(), // 1 hour ago
       );
 
-      const sync = new WhatsAppMetadataSync(INTERVAL_MS);
+      const sync = new WhatsAppMetadataSync(INTERVAL_MS, mockChatRepo);
       const fetchGroups = vi.fn();
 
       await sync.sync(fetchGroups);
@@ -63,11 +66,11 @@ describe('WhatsAppMetadataSync', () => {
     });
 
     it('forces sync regardless of cache', async () => {
-      vi.mocked(getLastGroupSync).mockReturnValue(
+      vi.mocked(mockChatRepo.getLastGroupSync).mockReturnValue(
         new Date(Date.now() - 60 * 60 * 1000).toISOString(),
       );
 
-      const sync = new WhatsAppMetadataSync(INTERVAL_MS);
+      const sync = new WhatsAppMetadataSync(INTERVAL_MS, mockChatRepo);
       const fetchGroups = vi.fn().mockResolvedValue({
         'group@g.us': { subject: 'Forced' },
       });
@@ -75,11 +78,11 @@ describe('WhatsAppMetadataSync', () => {
       await sync.sync(fetchGroups, true);
 
       expect(fetchGroups).toHaveBeenCalled();
-      expect(updateChatName).toHaveBeenCalledWith('group@g.us', 'Forced');
+      expect(mockChatRepo.updateChatName).toHaveBeenCalledWith('group@g.us', 'Forced');
     });
 
     it('handles fetch failure gracefully', async () => {
-      const sync = new WhatsAppMetadataSync(INTERVAL_MS);
+      const sync = new WhatsAppMetadataSync(INTERVAL_MS, mockChatRepo);
       const fetchGroups = vi.fn().mockRejectedValue(new Error('Network timeout'));
 
       // Should not throw
@@ -91,7 +94,7 @@ describe('WhatsAppMetadataSync', () => {
     });
 
     it('skips groups with no subject', async () => {
-      const sync = new WhatsAppMetadataSync(INTERVAL_MS);
+      const sync = new WhatsAppMetadataSync(INTERVAL_MS, mockChatRepo);
       const fetchGroups = vi.fn().mockResolvedValue({
         'group1@g.us': { subject: 'Has Subject' },
         'group2@g.us': { subject: '' },
@@ -100,14 +103,14 @@ describe('WhatsAppMetadataSync', () => {
 
       await sync.sync(fetchGroups, true);
 
-      expect(updateChatName).toHaveBeenCalledTimes(1);
-      expect(updateChatName).toHaveBeenCalledWith('group1@g.us', 'Has Subject');
+      expect(mockChatRepo.updateChatName).toHaveBeenCalledTimes(1);
+      expect(mockChatRepo.updateChatName).toHaveBeenCalledWith('group1@g.us', 'Has Subject');
     });
 
     it('syncs when lastSync is null (first run)', async () => {
-      vi.mocked(getLastGroupSync).mockReturnValue(null);
+      vi.mocked(mockChatRepo.getLastGroupSync).mockReturnValue(null);
 
-      const sync = new WhatsAppMetadataSync(INTERVAL_MS);
+      const sync = new WhatsAppMetadataSync(INTERVAL_MS, mockChatRepo);
       const fetchGroups = vi.fn().mockResolvedValue({});
 
       await sync.sync(fetchGroups);
@@ -116,11 +119,11 @@ describe('WhatsAppMetadataSync', () => {
     });
 
     it('syncs when lastSync is older than interval', async () => {
-      vi.mocked(getLastGroupSync).mockReturnValue(
+      vi.mocked(mockChatRepo.getLastGroupSync).mockReturnValue(
         new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(), // 25 hours ago
       );
 
-      const sync = new WhatsAppMetadataSync(INTERVAL_MS);
+      const sync = new WhatsAppMetadataSync(INTERVAL_MS, mockChatRepo);
       const fetchGroups = vi.fn().mockResolvedValue({});
 
       await sync.sync(fetchGroups);
@@ -139,7 +142,7 @@ describe('WhatsAppMetadataSync', () => {
     });
 
     it('starts periodic timer', async () => {
-      const sync = new WhatsAppMetadataSync(1000);
+      const sync = new WhatsAppMetadataSync(1000, mockChatRepo);
       const fetchGroups = vi.fn().mockResolvedValue({});
 
       sync.startPeriodicSync(fetchGroups);
@@ -156,7 +159,7 @@ describe('WhatsAppMetadataSync', () => {
     });
 
     it('only starts timer once (idempotent)', async () => {
-      const sync = new WhatsAppMetadataSync(1000);
+      const sync = new WhatsAppMetadataSync(1000, mockChatRepo);
       const fetchGroups1 = vi.fn().mockResolvedValue({});
       const fetchGroups2 = vi.fn().mockResolvedValue({});
 

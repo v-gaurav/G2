@@ -1,7 +1,6 @@
 export type { IpcCommandHandler } from './types.js';
 export { BaseIpcHandler, IpcHandlerError } from './base-handler.js';
 export type { HandlerContext } from './base-handler.js';
-export { getAuthorizedTask } from './task-helpers.js';
 export { IpcCommandDispatcher } from './dispatcher.js';
 export { ScheduleTaskHandler } from './schedule-task.js';
 export { PauseTaskHandler } from './pause-task.js';

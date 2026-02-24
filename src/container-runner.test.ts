@@ -86,14 +86,17 @@ vi.mock('child_process', async () => {
   };
 });
 
-import { runContainerAgent, ContainerOutput } from './container-runner.js';
+import { ContainerRunner, ContainerOutput } from './container-runner.js';
 import type { RegisteredGroup } from './types.js';
+
+const runner = new ContainerRunner();
 
 const testGroup: RegisteredGroup = {
   name: 'Test Group',
   folder: 'test-group',
   trigger: '@G2',
   added_at: new Date().toISOString(),
+  channel: 'whatsapp',
 };
 
 const testInput = {
@@ -120,7 +123,7 @@ describe('container-runner timeout behavior', () => {
 
   it('timeout after output resolves as success', async () => {
     const onOutput = vi.fn(async () => {});
-    const resultPromise = runContainerAgent(
+    const resultPromise = runner.run(
       testGroup,
       testInput,
       () => {},
@@ -156,7 +159,7 @@ describe('container-runner timeout behavior', () => {
 
   it('timeout with no output resolves as error', async () => {
     const onOutput = vi.fn(async () => {});
-    const resultPromise = runContainerAgent(
+    const resultPromise = runner.run(
       testGroup,
       testInput,
       () => {},
@@ -179,7 +182,7 @@ describe('container-runner timeout behavior', () => {
 
   it('normal exit after output resolves as success', async () => {
     const onOutput = vi.fn(async () => {});
-    const resultPromise = runContainerAgent(
+    const resultPromise = runner.run(
       testGroup,
       testInput,
       () => {},

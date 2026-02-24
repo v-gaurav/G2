@@ -3,7 +3,6 @@ import fs from 'fs';
 import path from 'path';
 
 import { STORE_DIR } from './config.js';
-import { ArchiveRepository, ConversationArchiveRow } from './repositories/archive-repository.js';
 import { ChatInfo, ChatRepository } from './repositories/chat-repository.js';
 import { GroupRepository } from './repositories/group-repository.js';
 import { MessageRepository } from './repositories/message-repository.js';
@@ -11,10 +10,16 @@ import { createSchema, runMigrations } from './repositories/schema.js';
 import { SessionRepository } from './repositories/session-repository.js';
 import { StateRepository } from './repositories/state-repository.js';
 import { TaskRepository } from './repositories/task-repository.js';
-import { NewMessage, RegisteredGroup, ScheduledTask, TaskRunLog } from './types.js';
+import { ArchivedSession, NewMessage, RegisteredGroup, ScheduledTask, TaskRunLog } from './types.js';
 
-// Re-export interfaces so existing `import { ChatInfo } from './db.js'` still works
-export type { ChatInfo, ConversationArchiveRow };
+// Re-export types so consumers can import repos and interfaces from './db.js'
+export type { ArchivedSession, ChatInfo };
+export { ChatRepository } from './repositories/chat-repository.js';
+export { MessageRepository } from './repositories/message-repository.js';
+export { TaskRepository } from './repositories/task-repository.js';
+export { SessionRepository } from './repositories/session-repository.js';
+export { GroupRepository } from './repositories/group-repository.js';
+export { StateRepository } from './repositories/state-repository.js';
 
 /**
  * AppDatabase — thin composition root that delegates to domain repositories.
@@ -23,13 +28,12 @@ export type { ChatInfo, ConversationArchiveRow };
 export class AppDatabase {
   private db!: BetterSqlite3.Database;
 
-  private chatRepo!: ChatRepository;
-  private messageRepo!: MessageRepository;
-  private taskRepo!: TaskRepository;
-  private sessionRepo!: SessionRepository;
-  private archiveRepo!: ArchiveRepository;
-  private groupRepo!: GroupRepository;
-  private stateRepo!: StateRepository;
+  public chatRepo!: ChatRepository;
+  public messageRepo!: MessageRepository;
+  public taskRepo!: TaskRepository;
+  public sessionRepo!: SessionRepository;
+  public groupRepo!: GroupRepository;
+  public stateRepo!: StateRepository;
 
   /** Open (or create) the database file at the standard location. */
   init(): void {
@@ -56,7 +60,6 @@ export class AppDatabase {
     this.messageRepo = new MessageRepository(this.db);
     this.taskRepo = new TaskRepository(this.db);
     this.sessionRepo = new SessionRepository(this.db);
-    this.archiveRepo = new ArchiveRepository(this.db);
     this.groupRepo = new GroupRepository(this.db);
     this.stateRepo = new StateRepository(this.db);
   }
@@ -96,12 +99,12 @@ export class AppDatabase {
   deleteSession(groupFolder: string): void { this.sessionRepo.deleteSession(groupFolder); }
   getAllSessions(): Record<string, string> { return this.sessionRepo.getAllSessions(); }
 
-  // --- Conversation archives (delegates to ArchiveRepository) ---
-  insertConversationArchive(groupFolder: string, sessionId: string, name: string, content: string, archivedAt: string): void { this.archiveRepo.insertConversationArchive(groupFolder, sessionId, name, content, archivedAt); }
-  getConversationArchives(groupFolder: string): Omit<ConversationArchiveRow, 'content'>[] { return this.archiveRepo.getConversationArchives(groupFolder); }
-  getConversationArchiveById(id: number): ConversationArchiveRow | undefined { return this.archiveRepo.getConversationArchiveById(id); }
-  searchConversationArchives(groupFolder: string, query: string): Omit<ConversationArchiveRow, 'content'>[] { return this.archiveRepo.searchConversationArchives(groupFolder, query); }
-  deleteConversationArchive(id: number): void { this.archiveRepo.deleteConversationArchive(id); }
+  // --- Conversation archives (delegates to SessionRepository) ---
+  insertConversationArchive(groupFolder: string, sessionId: string, name: string, content: string, archivedAt: string): void { this.sessionRepo.insertArchive(groupFolder, sessionId, name, content, archivedAt); }
+  getConversationArchives(groupFolder: string): Omit<ArchivedSession, 'content'>[] { return this.sessionRepo.getArchives(groupFolder); }
+  getConversationArchiveById(id: number): ArchivedSession | undefined { return this.sessionRepo.getArchiveById(id); }
+  searchConversationArchives(groupFolder: string, query: string): Omit<ArchivedSession, 'content'>[] { return this.sessionRepo.searchArchives(groupFolder, query); }
+  deleteConversationArchive(id: number): void { this.sessionRepo.deleteArchive(id); }
 
   // --- Registered groups (delegates to GroupRepository) ---
   getRegisteredGroup(jid: string): (RegisteredGroup & { jid: string }) | undefined { return this.groupRepo.getRegisteredGroup(jid); }
@@ -110,63 +113,7 @@ export class AppDatabase {
 }
 
 // ---------------------------------------------------------------------------
-// Singleton instance + backward-compatible function exports
+// Singleton instance
 // ---------------------------------------------------------------------------
 
 export const database = new AppDatabase();
-
-export function initDatabase(): void { database.init(); }
-export function _initTestDatabase(): void { database._initTest(); }
-
-export function storeChatMetadata(
-  chatJid: string, timestamp: string, name?: string, channel?: string, isGroup?: boolean,
-): void { database.storeChatMetadata(chatJid, timestamp, name, channel, isGroup); }
-export function updateChatName(chatJid: string, name: string): void { database.updateChatName(chatJid, name); }
-export function getAllChats(): ChatInfo[] { return database.getAllChats(); }
-export function getLastGroupSync(): string | null { return database.getLastGroupSync(); }
-export function setLastGroupSync(): void { database.setLastGroupSync(); }
-
-export function storeMessage(msg: NewMessage): void { database.storeMessage(msg); }
-export function storeMessageDirect(msg: Parameters<AppDatabase['storeMessageDirect']>[0]): void { database.storeMessageDirect(msg); }
-export function getNewMessages(
-  jids: string[], lastTimestamp: string, botPrefix: string,
-): { messages: NewMessage[]; newTimestamp: string } { return database.getNewMessages(jids, lastTimestamp, botPrefix); }
-export function getMessagesSince(
-  chatJid: string, sinceTimestamp: string, botPrefix: string,
-): NewMessage[] { return database.getMessagesSince(chatJid, sinceTimestamp, botPrefix); }
-
-export function createTask(task: Omit<ScheduledTask, 'last_run' | 'last_result'>): void { database.createTask(task); }
-export function getTaskById(id: string): ScheduledTask | undefined { return database.getTaskById(id); }
-export function getTasksForGroup(groupFolder: string): ScheduledTask[] { return database.getTasksForGroup(groupFolder); }
-export function getAllTasks(): ScheduledTask[] { return database.getAllTasks(); }
-export function updateTask(
-  id: string,
-  updates: Partial<Pick<ScheduledTask, 'prompt' | 'schedule_type' | 'schedule_value' | 'next_run' | 'status'>>,
-): void { database.updateTask(id, updates); }
-export function deleteTask(id: string): void { database.deleteTask(id); }
-export function getDueTasks(): ScheduledTask[] { return database.getDueTasks(); }
-export function claimTask(id: string): boolean { return database.claimTask(id); }
-export function updateTaskAfterRun(id: string, nextRun: string | null, lastResult: string): void { database.updateTaskAfterRun(id, nextRun, lastResult); }
-export function logTaskRun(log: TaskRunLog): void { database.logTaskRun(log); }
-
-export function getRouterState(key: string): string | undefined { return database.getRouterState(key); }
-export function setRouterState(key: string, value: string): void { database.setRouterState(key, value); }
-
-export function getSession(groupFolder: string): string | undefined { return database.getSession(groupFolder); }
-export function setSession(groupFolder: string, sessionId: string): void { database.setSession(groupFolder, sessionId); }
-export function deleteSession(groupFolder: string): void { database.deleteSession(groupFolder); }
-export function getAllSessions(): Record<string, string> { return database.getAllSessions(); }
-
-export function insertConversationArchive(
-  groupFolder: string, sessionId: string, name: string, content: string, archivedAt: string,
-): void { database.insertConversationArchive(groupFolder, sessionId, name, content, archivedAt); }
-export function getConversationArchives(groupFolder: string): Omit<ConversationArchiveRow, 'content'>[] { return database.getConversationArchives(groupFolder); }
-export function getConversationArchiveById(id: number): ConversationArchiveRow | undefined { return database.getConversationArchiveById(id); }
-export function searchConversationArchives(
-  groupFolder: string, query: string,
-): Omit<ConversationArchiveRow, 'content'>[] { return database.searchConversationArchives(groupFolder, query); }
-export function deleteConversationArchive(id: number): void { database.deleteConversationArchive(id); }
-
-export function getRegisteredGroup(jid: string): (RegisteredGroup & { jid: string }) | undefined { return database.getRegisteredGroup(jid); }
-export function setRegisteredGroup(jid: string, group: RegisteredGroup): void { database.setRegisteredGroup(jid, group); }
-export function getAllRegisteredGroups(): Record<string, RegisteredGroup> { return database.getAllRegisteredGroups(); }

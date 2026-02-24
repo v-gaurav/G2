@@ -1,8 +1,6 @@
-import { updateTask } from '../db.js';
 import { logger } from '../logger.js';
 
 import { BaseIpcHandler, HandlerContext, IpcHandlerError } from './base-handler.js';
-import { getAuthorizedTask } from './task-helpers.js';
 
 interface PauseTaskPayload {
   taskId: string;
@@ -19,8 +17,15 @@ export class PauseTaskHandler extends BaseIpcHandler<PauseTaskPayload> {
   }
 
   async execute(payload: PauseTaskPayload, context: HandlerContext): Promise<void> {
-    getAuthorizedTask(payload.taskId, context.sourceGroup, context.isMain);
-    updateTask(payload.taskId, { status: 'paused' });
+    try {
+      context.deps.taskManager.getAuthorized(payload.taskId, context.sourceGroup, context.isMain);
+    } catch (err) {
+      throw new IpcHandlerError(err instanceof Error ? err.message : String(err), {
+        taskId: payload.taskId,
+        sourceGroup: context.sourceGroup,
+      });
+    }
+    context.deps.taskManager.pause(payload.taskId);
     logger.info(
       { taskId: payload.taskId, sourceGroup: context.sourceGroup },
       'Task paused via IPC',

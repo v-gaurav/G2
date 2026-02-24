@@ -1,20 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
-import {
-  _initTestDatabase,
-  createTask,
-  deleteTask,
-  getAllChats,
-  getMessagesSince,
-  getNewMessages,
-  getTaskById,
-  storeChatMetadata,
-  storeMessage,
-  updateTask,
-} from './db.js';
+import { database } from './db.js';
 
 beforeEach(() => {
-  _initTestDatabase();
+  database._initTest();
 });
 
 // Helper to store a message using the normalized NewMessage interface
@@ -27,7 +16,7 @@ function store(overrides: {
   timestamp: string;
   is_from_me?: boolean;
 }) {
-  storeMessage({
+  database.storeMessage({
     id: overrides.id,
     chat_jid: overrides.chat_jid,
     sender: overrides.sender,
@@ -42,7 +31,7 @@ function store(overrides: {
 
 describe('storeMessage', () => {
   it('stores a message and retrieves it', () => {
-    storeChatMetadata('group@g.us', '2024-01-01T00:00:00.000Z');
+    database.storeChatMetadata('group@g.us', '2024-01-01T00:00:00.000Z');
 
     store({
       id: 'msg-1',
@@ -53,7 +42,7 @@ describe('storeMessage', () => {
       timestamp: '2024-01-01T00:00:01.000Z',
     });
 
-    const messages = getMessagesSince('group@g.us', '2024-01-01T00:00:00.000Z', 'G2');
+    const messages = database.getMessagesSince('group@g.us', '2024-01-01T00:00:00.000Z', 'G2');
     expect(messages).toHaveLength(1);
     expect(messages[0].id).toBe('msg-1');
     expect(messages[0].sender).toBe('123@s.whatsapp.net');
@@ -62,7 +51,7 @@ describe('storeMessage', () => {
   });
 
   it('stores empty content', () => {
-    storeChatMetadata('group@g.us', '2024-01-01T00:00:00.000Z');
+    database.storeChatMetadata('group@g.us', '2024-01-01T00:00:00.000Z');
 
     store({
       id: 'msg-2',
@@ -73,13 +62,13 @@ describe('storeMessage', () => {
       timestamp: '2024-01-01T00:00:04.000Z',
     });
 
-    const messages = getMessagesSince('group@g.us', '2024-01-01T00:00:00.000Z', 'G2');
+    const messages = database.getMessagesSince('group@g.us', '2024-01-01T00:00:00.000Z', 'G2');
     expect(messages).toHaveLength(1);
     expect(messages[0].content).toBe('');
   });
 
   it('stores is_from_me flag', () => {
-    storeChatMetadata('group@g.us', '2024-01-01T00:00:00.000Z');
+    database.storeChatMetadata('group@g.us', '2024-01-01T00:00:00.000Z');
 
     store({
       id: 'msg-3',
@@ -92,12 +81,12 @@ describe('storeMessage', () => {
     });
 
     // Message is stored (we can retrieve it — is_from_me doesn't affect retrieval)
-    const messages = getMessagesSince('group@g.us', '2024-01-01T00:00:00.000Z', 'G2');
+    const messages = database.getMessagesSince('group@g.us', '2024-01-01T00:00:00.000Z', 'G2');
     expect(messages).toHaveLength(1);
   });
 
   it('upserts on duplicate id+chat_jid', () => {
-    storeChatMetadata('group@g.us', '2024-01-01T00:00:00.000Z');
+    database.storeChatMetadata('group@g.us', '2024-01-01T00:00:00.000Z');
 
     store({
       id: 'msg-dup',
@@ -117,7 +106,7 @@ describe('storeMessage', () => {
       timestamp: '2024-01-01T00:00:01.000Z',
     });
 
-    const messages = getMessagesSince('group@g.us', '2024-01-01T00:00:00.000Z', 'G2');
+    const messages = database.getMessagesSince('group@g.us', '2024-01-01T00:00:00.000Z', 'G2');
     expect(messages).toHaveLength(1);
     expect(messages[0].content).toBe('updated');
   });
@@ -127,7 +116,7 @@ describe('storeMessage', () => {
 
 describe('getMessagesSince', () => {
   beforeEach(() => {
-    storeChatMetadata('group@g.us', '2024-01-01T00:00:00.000Z');
+    database.storeChatMetadata('group@g.us', '2024-01-01T00:00:00.000Z');
 
     store({
       id: 'm1', chat_jid: 'group@g.us', sender: 'Alice@s.whatsapp.net',
@@ -137,7 +126,7 @@ describe('getMessagesSince', () => {
       id: 'm2', chat_jid: 'group@g.us', sender: 'Bob@s.whatsapp.net',
       sender_name: 'Bob', content: 'second', timestamp: '2024-01-01T00:00:02.000Z',
     });
-    storeMessage({
+    database.storeMessage({
       id: 'm3', chat_jid: 'group@g.us', sender: 'Bot@s.whatsapp.net',
       sender_name: 'Bot', content: 'bot reply', timestamp: '2024-01-01T00:00:03.000Z',
       is_bot_message: true,
@@ -149,20 +138,20 @@ describe('getMessagesSince', () => {
   });
 
   it('returns messages after the given timestamp', () => {
-    const msgs = getMessagesSince('group@g.us', '2024-01-01T00:00:02.000Z', 'G2');
+    const msgs = database.getMessagesSince('group@g.us', '2024-01-01T00:00:02.000Z', 'G2');
     // Should exclude m1, m2 (before/at timestamp), m3 (bot message)
     expect(msgs).toHaveLength(1);
     expect(msgs[0].content).toBe('third');
   });
 
   it('excludes bot messages via is_bot_message flag', () => {
-    const msgs = getMessagesSince('group@g.us', '2024-01-01T00:00:00.000Z', 'G2');
+    const msgs = database.getMessagesSince('group@g.us', '2024-01-01T00:00:00.000Z', 'G2');
     const botMsgs = msgs.filter((m) => m.content === 'bot reply');
     expect(botMsgs).toHaveLength(0);
   });
 
   it('returns all non-bot messages when sinceTimestamp is empty', () => {
-    const msgs = getMessagesSince('group@g.us', '', 'G2');
+    const msgs = database.getMessagesSince('group@g.us', '', 'G2');
     // 3 user messages (bot message excluded)
     expect(msgs).toHaveLength(3);
   });
@@ -174,7 +163,7 @@ describe('getMessagesSince', () => {
       sender_name: 'Bot', content: 'G2: old bot reply',
       timestamp: '2024-01-01T00:00:05.000Z',
     });
-    const msgs = getMessagesSince('group@g.us', '2024-01-01T00:00:04.000Z', 'G2');
+    const msgs = database.getMessagesSince('group@g.us', '2024-01-01T00:00:04.000Z', 'G2');
     expect(msgs).toHaveLength(0);
   });
 });
@@ -183,8 +172,8 @@ describe('getMessagesSince', () => {
 
 describe('getNewMessages', () => {
   beforeEach(() => {
-    storeChatMetadata('group1@g.us', '2024-01-01T00:00:00.000Z');
-    storeChatMetadata('group2@g.us', '2024-01-01T00:00:00.000Z');
+    database.storeChatMetadata('group1@g.us', '2024-01-01T00:00:00.000Z');
+    database.storeChatMetadata('group2@g.us', '2024-01-01T00:00:00.000Z');
 
     store({
       id: 'a1', chat_jid: 'group1@g.us', sender: 'user@s.whatsapp.net',
@@ -194,7 +183,7 @@ describe('getNewMessages', () => {
       id: 'a2', chat_jid: 'group2@g.us', sender: 'user@s.whatsapp.net',
       sender_name: 'User', content: 'g2 msg1', timestamp: '2024-01-01T00:00:02.000Z',
     });
-    storeMessage({
+    database.storeMessage({
       id: 'a3', chat_jid: 'group1@g.us', sender: 'user@s.whatsapp.net',
       sender_name: 'User', content: 'bot reply', timestamp: '2024-01-01T00:00:03.000Z',
       is_bot_message: true,
@@ -206,7 +195,7 @@ describe('getNewMessages', () => {
   });
 
   it('returns new messages across multiple groups', () => {
-    const { messages, newTimestamp } = getNewMessages(
+    const { messages, newTimestamp } = database.getNewMessages(
       ['group1@g.us', 'group2@g.us'],
       '2024-01-01T00:00:00.000Z',
       'G2',
@@ -217,7 +206,7 @@ describe('getNewMessages', () => {
   });
 
   it('filters by timestamp', () => {
-    const { messages } = getNewMessages(
+    const { messages } = database.getNewMessages(
       ['group1@g.us', 'group2@g.us'],
       '2024-01-01T00:00:02.000Z',
       'G2',
@@ -228,7 +217,7 @@ describe('getNewMessages', () => {
   });
 
   it('returns empty for no registered groups', () => {
-    const { messages, newTimestamp } = getNewMessages([], '', 'G2');
+    const { messages, newTimestamp } = database.getNewMessages([], '', 'G2');
     expect(messages).toHaveLength(0);
     expect(newTimestamp).toBe('');
   });
@@ -238,31 +227,31 @@ describe('getNewMessages', () => {
 
 describe('storeChatMetadata', () => {
   it('stores chat with JID as default name', () => {
-    storeChatMetadata('group@g.us', '2024-01-01T00:00:00.000Z');
-    const chats = getAllChats();
+    database.storeChatMetadata('group@g.us', '2024-01-01T00:00:00.000Z');
+    const chats = database.getAllChats();
     expect(chats).toHaveLength(1);
     expect(chats[0].jid).toBe('group@g.us');
     expect(chats[0].name).toBe('group@g.us');
   });
 
   it('stores chat with explicit name', () => {
-    storeChatMetadata('group@g.us', '2024-01-01T00:00:00.000Z', 'My Group');
-    const chats = getAllChats();
+    database.storeChatMetadata('group@g.us', '2024-01-01T00:00:00.000Z', 'My Group');
+    const chats = database.getAllChats();
     expect(chats[0].name).toBe('My Group');
   });
 
   it('updates name on subsequent call with name', () => {
-    storeChatMetadata('group@g.us', '2024-01-01T00:00:00.000Z');
-    storeChatMetadata('group@g.us', '2024-01-01T00:00:01.000Z', 'Updated Name');
-    const chats = getAllChats();
+    database.storeChatMetadata('group@g.us', '2024-01-01T00:00:00.000Z');
+    database.storeChatMetadata('group@g.us', '2024-01-01T00:00:01.000Z', 'Updated Name');
+    const chats = database.getAllChats();
     expect(chats).toHaveLength(1);
     expect(chats[0].name).toBe('Updated Name');
   });
 
   it('preserves newer timestamp on conflict', () => {
-    storeChatMetadata('group@g.us', '2024-01-01T00:00:05.000Z');
-    storeChatMetadata('group@g.us', '2024-01-01T00:00:01.000Z');
-    const chats = getAllChats();
+    database.storeChatMetadata('group@g.us', '2024-01-01T00:00:05.000Z');
+    database.storeChatMetadata('group@g.us', '2024-01-01T00:00:01.000Z');
+    const chats = database.getAllChats();
     expect(chats[0].last_message_time).toBe('2024-01-01T00:00:05.000Z');
   });
 });
@@ -271,7 +260,7 @@ describe('storeChatMetadata', () => {
 
 describe('task CRUD', () => {
   it('creates and retrieves a task', () => {
-    createTask({
+    database.createTask({
       id: 'task-1',
       group_folder: 'main',
       chat_jid: 'group@g.us',
@@ -284,14 +273,14 @@ describe('task CRUD', () => {
       created_at: '2024-01-01T00:00:00.000Z',
     });
 
-    const task = getTaskById('task-1');
+    const task = database.getTaskById('task-1');
     expect(task).toBeDefined();
     expect(task!.prompt).toBe('do something');
     expect(task!.status).toBe('active');
   });
 
   it('updates task status', () => {
-    createTask({
+    database.createTask({
       id: 'task-2',
       group_folder: 'main',
       chat_jid: 'group@g.us',
@@ -304,12 +293,12 @@ describe('task CRUD', () => {
       created_at: '2024-01-01T00:00:00.000Z',
     });
 
-    updateTask('task-2', { status: 'paused' });
-    expect(getTaskById('task-2')!.status).toBe('paused');
+    database.updateTask('task-2', { status: 'paused' });
+    expect(database.getTaskById('task-2')!.status).toBe('paused');
   });
 
   it('deletes a task and its run logs', () => {
-    createTask({
+    database.createTask({
       id: 'task-3',
       group_folder: 'main',
       chat_jid: 'group@g.us',
@@ -322,7 +311,7 @@ describe('task CRUD', () => {
       created_at: '2024-01-01T00:00:00.000Z',
     });
 
-    deleteTask('task-3');
-    expect(getTaskById('task-3')).toBeUndefined();
+    database.deleteTask('task-3');
+    expect(database.getTaskById('task-3')).toBeUndefined();
   });
 });

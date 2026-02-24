@@ -1,4 +1,3 @@
-import { insertConversationArchive } from '../db.js';
 import { logger } from '../logger.js';
 
 import { BaseIpcHandler, HandlerContext, IpcHandlerError } from './base-handler.js';
@@ -26,12 +25,11 @@ export class ArchiveSessionHandler extends BaseIpcHandler<ArchiveSessionPayload>
   }
 
   async execute(payload: ArchiveSessionPayload, context: HandlerContext): Promise<void> {
-    insertConversationArchive(
+    context.deps.sessionManager.archive(
       context.sourceGroup,
       payload.sessionId,
       payload.name,
       payload.content,
-      payload.timestamp,
     );
 
     logger.info({ sourceGroup: context.sourceGroup, sessionId: payload.sessionId, name: payload.name }, 'Session archived via IPC');

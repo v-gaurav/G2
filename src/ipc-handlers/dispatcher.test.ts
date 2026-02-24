@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 
 import { IpcDeps } from '../ipc.js';
 import { SessionManager } from '../session-manager.js';
+import { TaskManager } from '../task-manager.js';
 import { IpcCommandDispatcher } from './dispatcher.js';
 import { IpcCommandHandler } from './types.js';
 
@@ -13,8 +14,9 @@ function makeMockDeps(): IpcDeps {
     syncGroupMetadata: async () => {},
     getAvailableGroups: () => [],
     writeGroupsSnapshot: () => {},
-    sessionManager: new SessionManager(),
+    sessionManager: {} as SessionManager,
     closeStdin: () => {},
+    taskManager: {} as TaskManager,
   };
 }
 

@@ -10,7 +10,9 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys';
 
 import { ASSISTANT_HAS_OWN_NUMBER, ASSISTANT_NAME, STORE_DIR } from '../config.js';
+import { database as defaultDatabase } from '../db.js';
 import { logger } from '../logger.js';
+import type { ChatRepository } from '../repositories/chat-repository.js';
 import { Channel, OnInboundMessage, OnChatMetadata, RegisteredGroup } from '../types.js';
 import { OutgoingMessageQueue } from './outgoing-message-queue.js';
 import { WhatsAppMetadataSync } from './whatsapp-metadata-sync.js';
@@ -21,6 +23,7 @@ export interface WhatsAppChannelOpts {
   onMessage: OnInboundMessage;
   onChatMetadata: OnChatMetadata;
   registeredGroups: () => Record<string, RegisteredGroup>;
+  chatRepo?: ChatRepository;
 }
 
 export class WhatsAppChannel implements Channel {
@@ -30,7 +33,7 @@ export class WhatsAppChannel implements Channel {
   private connected = false;
   private lidToPhoneMap: Record<string, string> = {};
   private messageQueue = new OutgoingMessageQueue();
-  private metadataSync = new WhatsAppMetadataSync(GROUP_SYNC_INTERVAL_MS);
+  private metadataSync: WhatsAppMetadataSync | null = null;
   private reconnectAttempt = 0;
 
   private opts: WhatsAppChannelOpts;
@@ -196,6 +199,10 @@ export class WhatsAppChannel implements Channel {
    * Called on startup, daily, and on-demand via IPC.
    */
   async syncMetadata(force = false): Promise<void> {
+    if (!this.metadataSync) {
+      const chatRepo = this.opts.chatRepo ?? defaultDatabase.chatRepo;
+      this.metadataSync = new WhatsAppMetadataSync(GROUP_SYNC_INTERVAL_MS, chatRepo);
+    }
     return this.metadataSync.sync(
       () => this.sock.groupFetchAllParticipating(),
       force,
@@ -223,6 +230,12 @@ export class WhatsAppChannel implements Channel {
     this.flushOutgoingQueue().catch((err) =>
       logger.error({ err }, 'Failed to flush outgoing queue'),
     );
+
+    // Lazily create metadataSync on first connection (after DB init)
+    if (!this.metadataSync) {
+      const chatRepo = this.opts.chatRepo ?? defaultDatabase.chatRepo;
+      this.metadataSync = new WhatsAppMetadataSync(GROUP_SYNC_INTERVAL_MS, chatRepo);
+    }
 
     // Sync group metadata on startup (respects 24h cache)
     const fetchGroups = () => this.sock.groupFetchAllParticipating();

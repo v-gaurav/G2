@@ -2,15 +2,8 @@ import fs from 'fs';
 
 import { AgentExecutor } from './agent-executor.js';
 import { ChannelRegistry } from './channel-registry.js';
-import type { AvailableGroup } from './container-runner.js';
-import { writeGroupsSnapshot } from './container-runner.js';
-import { cleanupOrphans, ensureContainerRuntimeRunning } from './container-runtime.js';
-import {
-  getAllChats,
-  getAllRegisteredGroups,
-  initDatabase,
-  setRegisteredGroup,
-} from './db.js';
+import { DockerRuntime } from './interfaces/docker-runtime.js';
+import { AppDatabase, database as defaultDatabase } from './db.js';
 import { GroupPaths } from './group-paths.js';
 import { GroupQueue } from './group-queue.js';
 import { startIpcWatcher } from './ipc.js';
@@ -18,12 +11,15 @@ import { logger } from './logger.js';
 import { MessageProcessor } from './message-processor.js';
 import { formatOutbound } from './router.js';
 import { SessionManager } from './session-manager.js';
+import { AvailableGroup, SnapshotWriter } from './snapshot-writer.js';
+import { TaskManager } from './task-manager.js';
 import { startSchedulerLoop } from './task-scheduler.js';
 import type { Channel } from './types.js';
 import { RegisteredGroup } from './types.js';
 
 export class Orchestrator {
-  private sessionManager: SessionManager;
+  private database: AppDatabase;
+  private sessionManager: SessionManager | null = null;
   private registeredGroups: Record<string, RegisteredGroup> = {};
 
   private channelRegistry: ChannelRegistry;
@@ -35,11 +31,11 @@ export class Orchestrator {
   constructor(deps?: {
     channelRegistry?: ChannelRegistry;
     queue?: GroupQueue;
-    sessionManager?: SessionManager;
+    database?: AppDatabase;
   }) {
+    this.database = deps?.database ?? defaultDatabase;
     this.channelRegistry = deps?.channelRegistry ?? new ChannelRegistry();
     this.queue = deps?.queue ?? new GroupQueue();
-    this.sessionManager = deps?.sessionManager ?? new SessionManager();
   }
 
   /**
@@ -68,7 +64,7 @@ export class Orchestrator {
    * Returns groups ordered by most recent activity.
    */
   getAvailableGroups(): AvailableGroup[] {
-    const chats = getAllChats();
+    const chats = this.database.chatRepo.getAllChats();
     const registeredJids = new Set(Object.keys(this.registeredGroups));
 
     return chats
@@ -91,7 +87,7 @@ export class Orchestrator {
    */
   registerGroup(jid: string, group: RegisteredGroup): void {
     this.registeredGroups[jid] = group;
-    setRegisteredGroup(jid, group);
+    this.database.groupRepo.setRegisteredGroup(jid, group);
 
     // Create group folder
     fs.mkdirSync(GroupPaths.logsDir(group.folder), { recursive: true });
@@ -107,15 +103,22 @@ export class Orchestrator {
    */
   async start(): Promise<void> {
     this.ensureContainerSystemRunning();
-    initDatabase();
+    this.database.init();
     logger.info('Database initialized');
 
+    // Now repos are available — distribute to subsystems
+    const { chatRepo, groupRepo, sessionRepo, taskRepo, stateRepo, messageRepo } = this.database;
+
+    this.sessionManager = new SessionManager(sessionRepo);
     this.sessionManager.loadFromDb();
-    this.registeredGroups = getAllRegisteredGroups();
+    this.registeredGroups = groupRepo.getAllRegisteredGroups();
     logger.info(
       { groupCount: Object.keys(this.registeredGroups).length },
       'State loaded',
     );
+
+    const taskManager = new TaskManager(taskRepo);
+    const snapshotWriter = new SnapshotWriter(taskManager);
 
     // Create composed services
     const agentExecutor = new AgentExecutor({
@@ -123,6 +126,7 @@ export class Orchestrator {
       queue: this.queue,
       getAvailableGroups: () => this.getAvailableGroups(),
       getRegisteredGroups: () => this.registeredGroups,
+      snapshotWriter,
     });
 
     this.messageProcessor = new MessageProcessor({
@@ -130,6 +134,8 @@ export class Orchestrator {
       channelRegistry: this.channelRegistry,
       queue: this.queue,
       agentExecutor,
+      stateRepo,
+      messageRepo,
     });
 
     this.messageProcessor.loadState();
@@ -144,8 +150,8 @@ export class Orchestrator {
     }
 
     // Start subsystems
-    this.startScheduler();
-    this.startIpc();
+    this.startScheduler(taskManager, snapshotWriter);
+    this.startIpc(taskManager, snapshotWriter);
     this.queue.setProcessMessagesFn((groupJid) => this.messageProcessor!.processGroupMessages(groupJid));
     this.messageProcessor.recoverPendingMessages();
     this.messageLoop = this.messageProcessor.startPolling();
@@ -169,16 +175,17 @@ export class Orchestrator {
   // --- Private: container system ---
 
   private ensureContainerSystemRunning(): void {
-    ensureContainerRuntimeRunning();
-    cleanupOrphans();
+    const runtime = new DockerRuntime();
+    runtime.ensureRunning();
+    runtime.cleanupOrphans();
   }
 
   // --- Private: subsystem startup ---
 
-  private startScheduler(): void {
+  private startScheduler(taskManager: TaskManager, snapshotWriter: SnapshotWriter): void {
     startSchedulerLoop({
       registeredGroups: () => this.registeredGroups,
-      getSessions: () => this.sessionManager.getAll(),
+      getSessions: () => this.sessionManager!.getAll(),
       queue: this.queue,
       onProcess: (groupJid, proc, containerName, groupFolder) =>
         this.queue.registerProcess(groupJid, proc, containerName, groupFolder),
@@ -191,10 +198,12 @@ export class Orchestrator {
         const text = formatOutbound(rawText);
         if (text) await channel.sendMessage(jid, text);
       },
+      taskManager,
+      snapshotWriter,
     });
   }
 
-  private startIpc(): void {
+  private startIpc(taskManager: TaskManager, snapshotWriter: SnapshotWriter): void {
     startIpcWatcher({
       sendMessage: (jid, text) => {
         const channel = this.channelRegistry.findConnectedByJid(jid);
@@ -206,9 +215,10 @@ export class Orchestrator {
       syncGroupMetadata: (force) => this.channelRegistry.syncAllMetadata(force),
       getAvailableGroups: () => this.getAvailableGroups(),
       writeGroupsSnapshot: (groupFolder, isMain, availableGroups, registeredJids) =>
-        writeGroupsSnapshot(groupFolder, isMain, availableGroups, registeredJids),
-      sessionManager: this.sessionManager,
+        snapshotWriter.writeGroups(groupFolder, isMain, availableGroups, registeredJids),
+      sessionManager: this.sessionManager!,
       closeStdin: (chatJid) => this.queue.closeStdin(chatJid),
+      taskManager,
     });
   }
 }

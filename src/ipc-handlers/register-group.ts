@@ -8,6 +8,7 @@ interface RegisterGroupPayload {
   name: string;
   folder: string;
   trigger: string;
+  channel?: string;
   containerConfig?: import('../types.js').ContainerConfig;
   requiresTrigger?: boolean;
 }
@@ -30,6 +31,7 @@ export class RegisterGroupHandler extends BaseIpcHandler<RegisterGroupPayload> {
       name: data.name as string,
       folder: data.folder as string,
       trigger: data.trigger as string,
+      channel: data.channel as string | undefined,
       containerConfig: data.containerConfig,
       requiresTrigger: data.requiresTrigger as boolean | undefined,
     };
@@ -48,6 +50,7 @@ export class RegisterGroupHandler extends BaseIpcHandler<RegisterGroupPayload> {
       folder: payload.folder,
       trigger: payload.trigger,
       added_at: new Date().toISOString(),
+      channel: payload.channel || 'whatsapp',
       containerConfig: payload.containerConfig,
       requiresTrigger: payload.requiresTrigger,
     });

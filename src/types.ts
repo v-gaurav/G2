@@ -37,6 +37,7 @@ export interface RegisteredGroup {
   folder: string;
   trigger: string;
   added_at: string;
+  channel: string;                // e.g. 'whatsapp', 'telegram'
   containerConfig?: ContainerConfig;
   requiresTrigger?: boolean; // Default: true for groups, false for solo chats
 }
@@ -65,6 +66,15 @@ export interface ScheduledTask {
   last_result: string | null;
   status: 'active' | 'paused' | 'completed';
   created_at: string;
+}
+
+export interface ArchivedSession {
+  id: number;
+  group_folder: string;
+  session_id: string;
+  name: string;
+  content: string;
+  archived_at: string;
 }
 
 export interface TaskRunLog {

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { _initTestDatabase } from '../db.js';
+import { database } from '../db.js';
 import { SqliteMessageStore } from './sqlite-message-store.js';
 import type { NewMessage } from '../types.js';
 
@@ -7,8 +7,8 @@ describe('SqliteMessageStore', () => {
   let store: SqliteMessageStore;
 
   beforeEach(() => {
-    _initTestDatabase();
-    store = new SqliteMessageStore();
+    database._initTest();
+    store = new SqliteMessageStore(database.messageRepo, database.chatRepo);
   });
 
   /** Helper: ensure the chat row exists so FK constraint is satisfied. */

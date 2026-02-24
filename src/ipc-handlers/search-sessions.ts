@@ -1,7 +1,6 @@
 import fs from 'fs';
 import path from 'path';
 
-import { searchConversationArchives } from '../db.js';
 import { GroupPaths } from '../group-paths.js';
 import { logger } from '../logger.js';
 
@@ -26,7 +25,7 @@ export class SearchSessionsHandler extends BaseIpcHandler<SearchSessionsPayload>
   }
 
   async execute(payload: SearchSessionsPayload, context: HandlerContext): Promise<void> {
-    const results = searchConversationArchives(context.sourceGroup, payload.query);
+    const results = context.deps.sessionManager.search(context.sourceGroup, payload.query);
 
     const responsesDir = GroupPaths.ipcResponsesDir(context.sourceGroup);
     fs.mkdirSync(responsesDir, { recursive: true });

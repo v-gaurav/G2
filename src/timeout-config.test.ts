@@ -12,6 +12,7 @@ const baseGroup: RegisteredGroup = {
   folder: 'test-group',
   trigger: '@G2',
   added_at: '2024-01-01T00:00:00.000Z',
+  channel: 'whatsapp',
 };
 
 describe('TimeoutConfig', () => {

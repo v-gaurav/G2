@@ -1,15 +1,11 @@
-import {
-  getLastGroupSync,
-  setLastGroupSync,
-  updateChatName,
-} from '../db.js';
+import { ChatRepository } from '../repositories/chat-repository.js';
 import { logger } from '../logger.js';
 
 export class WhatsAppMetadataSync {
   private timerStarted = false;
   private intervalMs: number;
 
-  constructor(intervalMs: number) {
+  constructor(intervalMs: number, private chatRepo: ChatRepository) {
     this.intervalMs = intervalMs;
   }
 
@@ -23,7 +19,7 @@ export class WhatsAppMetadataSync {
     force = false,
   ): Promise<void> {
     if (!force) {
-      const lastSync = getLastGroupSync();
+      const lastSync = this.chatRepo.getLastGroupSync();
       if (lastSync) {
         const lastSyncTime = new Date(lastSync).getTime();
         // Guard against corrupted timestamps — NaN comparison is always false,
@@ -42,12 +38,12 @@ export class WhatsAppMetadataSync {
       let count = 0;
       for (const [jid, metadata] of Object.entries(groups)) {
         if (metadata.subject) {
-          updateChatName(jid, metadata.subject);
+          this.chatRepo.updateChatName(jid, metadata.subject);
           count++;
         }
       }
 
-      setLastGroupSync();
+      this.chatRepo.setLastGroupSync();
       logger.info({ count }, 'Group metadata synced');
     } catch (err) {
       logger.error({ err }, 'Failed to sync group metadata');

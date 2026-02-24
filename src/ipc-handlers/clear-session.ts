@@ -1,7 +1,5 @@
-import { insertConversationArchive } from '../db.js';
 import { logger } from '../logger.js';
 
-import { readAndFormatTranscript } from './archive-utils.js';
 import { BaseIpcHandler, HandlerContext } from './base-handler.js';
 
 interface ClearSessionPayload {
@@ -17,14 +15,8 @@ export class ClearSessionHandler extends BaseIpcHandler<ClearSessionPayload> {
 
   async execute(payload: ClearSessionPayload, context: HandlerContext): Promise<void> {
     const { sourceGroup, deps } = context;
-    const sessionId = deps.sessionManager.get(sourceGroup);
 
-    if (sessionId && payload.name) {
-      const content = readAndFormatTranscript(sourceGroup, sessionId, payload.name);
-      insertConversationArchive(sourceGroup, sessionId, payload.name, content || '', new Date().toISOString());
-    }
-
-    deps.sessionManager.delete(sourceGroup);
+    deps.sessionManager.clear(sourceGroup, payload.name);
 
     const clearGroups = deps.registeredGroups();
     for (const [jid, g] of Object.entries(clearGroups)) {

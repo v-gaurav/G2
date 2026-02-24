@@ -1,6 +1,9 @@
 /**
- * DefaultMountFactory — extracts the buildVolumeMounts logic from container-runner.ts.
+ * DefaultMountFactory — builds container volume mounts.
  * Uses an IContainerRuntime for mount arg generation.
+ *
+ * prepare() handles side effects (directory creation, file writes).
+ * buildMounts() is pure — returns mount list assuming dirs already exist.
  */
 import fs from 'fs';
 import os from 'os';
@@ -26,46 +29,15 @@ function getHomeDir(): string {
 export class DefaultMountFactory implements IMountFactory {
   constructor(private readonly runtime: IContainerRuntime) {}
 
-  buildMounts(group: RegisteredGroup, isMain: boolean): VolumeMount[] {
-    const mounts: VolumeMount[] = [];
-    const projectRoot = process.cwd();
-
-    if (isMain) {
-      // Main gets the entire project root mounted
-      mounts.push({
-        hostPath: projectRoot,
-        containerPath: '/workspace/project',
-        readonly: false,
-      });
-
-      // Main also gets its group folder as the working directory
-      mounts.push({
-        hostPath: GroupPaths.groupDir(group.folder),
-        containerPath: '/workspace/group',
-        readonly: false,
-      });
-    } else {
-      // Other groups only get their own folder
-      mounts.push({
-        hostPath: GroupPaths.groupDir(group.folder),
-        containerPath: '/workspace/group',
-        readonly: false,
-      });
-
-      // Global memory directory (read-only for non-main)
-      const globalDir = path.join(GROUPS_DIR, 'global');
-      if (fs.existsSync(globalDir)) {
-        mounts.push({
-          hostPath: globalDir,
-          containerPath: '/workspace/global',
-          readonly: true,
-        });
-      }
-    }
-
-    // Per-group Claude sessions directory (isolated from other groups)
+  /**
+   * Create directories, write settings.json, sync skills — all side effects.
+   * Must be called before buildMounts() for the first run.
+   */
+  prepare(group: RegisteredGroup, _isMain: boolean): void {
+    // Per-group Claude sessions directory
     const groupSessionsDir = GroupPaths.sessionsDir(group.folder);
     fs.mkdirSync(groupSessionsDir, { recursive: true });
+
     const settingsFile = path.join(groupSessionsDir, 'settings.json');
     if (!fs.existsSync(settingsFile)) {
       fs.writeFileSync(settingsFile, JSON.stringify({
@@ -93,20 +65,61 @@ export class DefaultMountFactory implements IMountFactory {
         }
       }
     }
+
+    // Per-group IPC namespace directories
+    fs.mkdirSync(GroupPaths.ipcMessagesDir(group.folder), { recursive: true });
+    fs.mkdirSync(GroupPaths.ipcTasksDir(group.folder), { recursive: true });
+    fs.mkdirSync(GroupPaths.ipcInputDir(group.folder), { recursive: true });
+    fs.mkdirSync(GroupPaths.ipcResponsesDir(group.folder), { recursive: true });
+  }
+
+  /**
+   * Build the full list of volume mounts for a container run.
+   * Pure: returns mount list assuming directories already exist (call prepare() first).
+   */
+  buildMounts(group: RegisteredGroup, isMain: boolean): VolumeMount[] {
+    const mounts: VolumeMount[] = [];
+    const projectRoot = process.cwd();
+
+    if (isMain) {
+      mounts.push({
+        hostPath: projectRoot,
+        containerPath: '/workspace/project',
+        readonly: false,
+      });
+
+      mounts.push({
+        hostPath: GroupPaths.groupDir(group.folder),
+        containerPath: '/workspace/group',
+        readonly: false,
+      });
+    } else {
+      mounts.push({
+        hostPath: GroupPaths.groupDir(group.folder),
+        containerPath: '/workspace/group',
+        readonly: false,
+      });
+
+      const globalDir = path.join(GROUPS_DIR, 'global');
+      if (fs.existsSync(globalDir)) {
+        mounts.push({
+          hostPath: globalDir,
+          containerPath: '/workspace/global',
+          readonly: true,
+        });
+      }
+    }
+
+    // Per-group Claude sessions directory
     mounts.push({
-      hostPath: groupSessionsDir,
+      hostPath: GroupPaths.sessionsDir(group.folder),
       containerPath: '/home/node/.claude',
       readonly: false,
     });
 
     // Per-group IPC namespace
-    const groupIpcDir = GroupPaths.ipcDir(group.folder);
-    fs.mkdirSync(GroupPaths.ipcMessagesDir(group.folder), { recursive: true });
-    fs.mkdirSync(GroupPaths.ipcTasksDir(group.folder), { recursive: true });
-    fs.mkdirSync(GroupPaths.ipcInputDir(group.folder), { recursive: true });
-    fs.mkdirSync(GroupPaths.ipcResponsesDir(group.folder), { recursive: true });
     mounts.push({
-      hostPath: groupIpcDir,
+      hostPath: GroupPaths.ipcDir(group.folder),
       containerPath: '/workspace/ipc',
       readonly: false,
     });

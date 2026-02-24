@@ -23,14 +23,23 @@ interface GroupState {
   retryCount: number;
 }
 
+export interface GroupQueueDeps {
+  transport?: IpcTransport;
+  processMessagesFn?: (groupJid: string) => Promise<boolean>;
+}
+
 export class GroupQueue {
   private groups = new Map<string, GroupState>();
   private activeCount = 0;
   private waitingGroups = new Set<string>();
-  private processMessagesFn: ((groupJid: string) => Promise<boolean>) | null =
-    null;
+  private processMessagesFn: ((groupJid: string) => Promise<boolean>) | null;
   private shuttingDown = false;
-  private transport = new IpcTransport();
+  private transport: IpcTransport;
+
+  constructor(deps?: GroupQueueDeps) {
+    this.transport = deps?.transport ?? new IpcTransport();
+    this.processMessagesFn = deps?.processMessagesFn ?? null;
+  }
 
   private getGroup(groupJid: string): GroupState {
     let state = this.groups.get(groupJid);

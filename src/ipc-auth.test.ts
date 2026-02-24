@@ -1,15 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
-import {
-  _initTestDatabase,
-  createTask,
-  getAllTasks,
-  getRegisteredGroup,
-  getTaskById,
-  setRegisteredGroup,
-} from './db.js';
+import { database } from './db.js';
 import { processTaskIpc, IpcDeps } from './ipc.js';
 import { SessionManager } from './session-manager.js';
+import { TaskManager } from './task-manager.js';
 import { RegisteredGroup } from './types.js';
 
 // Set up registered groups used across tests
@@ -18,6 +12,7 @@ const MAIN_GROUP: RegisteredGroup = {
   folder: 'main',
   trigger: 'always',
   added_at: '2024-01-01T00:00:00.000Z',
+  channel: 'whatsapp',
 };
 
 const OTHER_GROUP: RegisteredGroup = {
@@ -25,6 +20,7 @@ const OTHER_GROUP: RegisteredGroup = {
   folder: 'other-group',
   trigger: '@G2',
   added_at: '2024-01-01T00:00:00.000Z',
+  channel: 'whatsapp',
 };
 
 const THIRD_GROUP: RegisteredGroup = {
@@ -32,13 +28,14 @@ const THIRD_GROUP: RegisteredGroup = {
   folder: 'third-group',
   trigger: '@G2',
   added_at: '2024-01-01T00:00:00.000Z',
+  channel: 'whatsapp',
 };
 
 let groups: Record<string, RegisteredGroup>;
 let deps: IpcDeps;
 
 beforeEach(() => {
-  _initTestDatabase();
+  database._initTest();
 
   groups = {
     'main@g.us': MAIN_GROUP,
@@ -47,23 +44,23 @@ beforeEach(() => {
   };
 
   // Populate DB as well
-  setRegisteredGroup('main@g.us', MAIN_GROUP);
-  setRegisteredGroup('other@g.us', OTHER_GROUP);
-  setRegisteredGroup('third@g.us', THIRD_GROUP);
+  database.setRegisteredGroup('main@g.us', MAIN_GROUP);
+  database.setRegisteredGroup('other@g.us', OTHER_GROUP);
+  database.setRegisteredGroup('third@g.us', THIRD_GROUP);
 
   deps = {
     sendMessage: async () => {},
     registeredGroups: () => groups,
     registerGroup: (jid, group) => {
       groups[jid] = group;
-      setRegisteredGroup(jid, group);
-      // Mock the fs.mkdirSync that registerGroup does
+      database.setRegisteredGroup(jid, group);
     },
     syncGroupMetadata: async () => {},
     getAvailableGroups: () => [],
     writeGroupsSnapshot: () => {},
-    sessionManager: new SessionManager(),
+    sessionManager: new SessionManager(database.sessionRepo),
     closeStdin: () => {},
+    taskManager: new TaskManager(database.taskRepo),
   };
 });
 
@@ -85,7 +82,7 @@ describe('schedule_task authorization', () => {
     );
 
     // Verify task was created in DB for the other group
-    const allTasks = getAllTasks();
+    const allTasks = database.getAllTasks();
     expect(allTasks.length).toBe(1);
     expect(allTasks[0].group_folder).toBe('other-group');
   });
@@ -104,7 +101,7 @@ describe('schedule_task authorization', () => {
       deps,
     );
 
-    const allTasks = getAllTasks();
+    const allTasks = database.getAllTasks();
     expect(allTasks.length).toBe(1);
     expect(allTasks[0].group_folder).toBe('other-group');
   });
@@ -123,7 +120,7 @@ describe('schedule_task authorization', () => {
       deps,
     );
 
-    const allTasks = getAllTasks();
+    const allTasks = database.getAllTasks();
     expect(allTasks.length).toBe(0);
   });
 
@@ -141,7 +138,7 @@ describe('schedule_task authorization', () => {
       deps,
     );
 
-    const allTasks = getAllTasks();
+    const allTasks = database.getAllTasks();
     expect(allTasks.length).toBe(0);
   });
 });
@@ -150,7 +147,7 @@ describe('schedule_task authorization', () => {
 
 describe('pause_task authorization', () => {
   beforeEach(() => {
-    createTask({
+    database.createTask({
       id: 'task-main',
       group_folder: 'main',
       chat_jid: 'main@g.us',
@@ -162,7 +159,7 @@ describe('pause_task authorization', () => {
       status: 'active',
       created_at: '2024-01-01T00:00:00.000Z',
     });
-    createTask({
+    database.createTask({
       id: 'task-other',
       group_folder: 'other-group',
       chat_jid: 'other@g.us',
@@ -178,17 +175,17 @@ describe('pause_task authorization', () => {
 
   it('main group can pause any task', async () => {
     await processTaskIpc({ type: 'pause_task', taskId: 'task-other' }, 'main', true, deps);
-    expect(getTaskById('task-other')!.status).toBe('paused');
+    expect(database.getTaskById('task-other')!.status).toBe('paused');
   });
 
   it('non-main group can pause its own task', async () => {
     await processTaskIpc({ type: 'pause_task', taskId: 'task-other' }, 'other-group', false, deps);
-    expect(getTaskById('task-other')!.status).toBe('paused');
+    expect(database.getTaskById('task-other')!.status).toBe('paused');
   });
 
   it('non-main group cannot pause another groups task', async () => {
     await processTaskIpc({ type: 'pause_task', taskId: 'task-main' }, 'other-group', false, deps);
-    expect(getTaskById('task-main')!.status).toBe('active');
+    expect(database.getTaskById('task-main')!.status).toBe('active');
   });
 });
 
@@ -196,7 +193,7 @@ describe('pause_task authorization', () => {
 
 describe('resume_task authorization', () => {
   beforeEach(() => {
-    createTask({
+    database.createTask({
       id: 'task-paused',
       group_folder: 'other-group',
       chat_jid: 'other@g.us',
@@ -212,17 +209,17 @@ describe('resume_task authorization', () => {
 
   it('main group can resume any task', async () => {
     await processTaskIpc({ type: 'resume_task', taskId: 'task-paused' }, 'main', true, deps);
-    expect(getTaskById('task-paused')!.status).toBe('active');
+    expect(database.getTaskById('task-paused')!.status).toBe('active');
   });
 
   it('non-main group can resume its own task', async () => {
     await processTaskIpc({ type: 'resume_task', taskId: 'task-paused' }, 'other-group', false, deps);
-    expect(getTaskById('task-paused')!.status).toBe('active');
+    expect(database.getTaskById('task-paused')!.status).toBe('active');
   });
 
   it('non-main group cannot resume another groups task', async () => {
     await processTaskIpc({ type: 'resume_task', taskId: 'task-paused' }, 'third-group', false, deps);
-    expect(getTaskById('task-paused')!.status).toBe('paused');
+    expect(database.getTaskById('task-paused')!.status).toBe('paused');
   });
 });
 
@@ -230,7 +227,7 @@ describe('resume_task authorization', () => {
 
 describe('cancel_task authorization', () => {
   it('main group can cancel any task', async () => {
-    createTask({
+    database.createTask({
       id: 'task-to-cancel',
       group_folder: 'other-group',
       chat_jid: 'other@g.us',
@@ -244,11 +241,11 @@ describe('cancel_task authorization', () => {
     });
 
     await processTaskIpc({ type: 'cancel_task', taskId: 'task-to-cancel' }, 'main', true, deps);
-    expect(getTaskById('task-to-cancel')).toBeUndefined();
+    expect(database.getTaskById('task-to-cancel')).toBeUndefined();
   });
 
   it('non-main group can cancel its own task', async () => {
-    createTask({
+    database.createTask({
       id: 'task-own',
       group_folder: 'other-group',
       chat_jid: 'other@g.us',
@@ -262,11 +259,11 @@ describe('cancel_task authorization', () => {
     });
 
     await processTaskIpc({ type: 'cancel_task', taskId: 'task-own' }, 'other-group', false, deps);
-    expect(getTaskById('task-own')).toBeUndefined();
+    expect(database.getTaskById('task-own')).toBeUndefined();
   });
 
   it('non-main group cannot cancel another groups task', async () => {
-    createTask({
+    database.createTask({
       id: 'task-foreign',
       group_folder: 'main',
       chat_jid: 'main@g.us',
@@ -280,7 +277,7 @@ describe('cancel_task authorization', () => {
     });
 
     await processTaskIpc({ type: 'cancel_task', taskId: 'task-foreign' }, 'other-group', false, deps);
-    expect(getTaskById('task-foreign')).toBeDefined();
+    expect(database.getTaskById('task-foreign')).toBeDefined();
   });
 });
 
@@ -373,7 +370,7 @@ describe('schedule_task schedule types', () => {
       deps,
     );
 
-    const tasks = getAllTasks();
+    const tasks = database.getAllTasks();
     expect(tasks).toHaveLength(1);
     expect(tasks[0].schedule_type).toBe('cron');
     expect(tasks[0].next_run).toBeTruthy();
@@ -395,7 +392,7 @@ describe('schedule_task schedule types', () => {
       deps,
     );
 
-    expect(getAllTasks()).toHaveLength(0);
+    expect(database.getAllTasks()).toHaveLength(0);
   });
 
   it('creates task with interval schedule', async () => {
@@ -414,7 +411,7 @@ describe('schedule_task schedule types', () => {
       deps,
     );
 
-    const tasks = getAllTasks();
+    const tasks = database.getAllTasks();
     expect(tasks).toHaveLength(1);
     expect(tasks[0].schedule_type).toBe('interval');
     // next_run should be ~1 hour from now
@@ -437,7 +434,7 @@ describe('schedule_task schedule types', () => {
       deps,
     );
 
-    expect(getAllTasks()).toHaveLength(0);
+    expect(database.getAllTasks()).toHaveLength(0);
   });
 
   it('rejects invalid interval (zero)', async () => {
@@ -454,7 +451,7 @@ describe('schedule_task schedule types', () => {
       deps,
     );
 
-    expect(getAllTasks()).toHaveLength(0);
+    expect(database.getAllTasks()).toHaveLength(0);
   });
 
   it('rejects invalid once timestamp', async () => {
@@ -471,7 +468,7 @@ describe('schedule_task schedule types', () => {
       deps,
     );
 
-    expect(getAllTasks()).toHaveLength(0);
+    expect(database.getAllTasks()).toHaveLength(0);
   });
 });
 
@@ -493,7 +490,7 @@ describe('schedule_task context_mode', () => {
       deps,
     );
 
-    const tasks = getAllTasks();
+    const tasks = database.getAllTasks();
     expect(tasks[0].context_mode).toBe('group');
   });
 
@@ -512,7 +509,7 @@ describe('schedule_task context_mode', () => {
       deps,
     );
 
-    const tasks = getAllTasks();
+    const tasks = database.getAllTasks();
     expect(tasks[0].context_mode).toBe('isolated');
   });
 
@@ -531,7 +528,7 @@ describe('schedule_task context_mode', () => {
       deps,
     );
 
-    const tasks = getAllTasks();
+    const tasks = database.getAllTasks();
     expect(tasks[0].context_mode).toBe('isolated');
   });
 
@@ -549,7 +546,7 @@ describe('schedule_task context_mode', () => {
       deps,
     );
 
-    const tasks = getAllTasks();
+    const tasks = database.getAllTasks();
     expect(tasks[0].context_mode).toBe('isolated');
   });
 });
@@ -572,7 +569,7 @@ describe('register_group success', () => {
     );
 
     // Verify group was registered in DB
-    const group = getRegisteredGroup('new@g.us');
+    const group = database.getRegisteredGroup('new@g.us');
     expect(group).toBeDefined();
     expect(group!.name).toBe('New Group');
     expect(group!.folder).toBe('new-group');
@@ -592,6 +589,6 @@ describe('register_group success', () => {
       deps,
     );
 
-    expect(getRegisteredGroup('partial@g.us')).toBeUndefined();
+    expect(database.getRegisteredGroup('partial@g.us')).toBeUndefined();
   });
 });

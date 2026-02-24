@@ -1,27 +1,20 @@
 import { ChildProcess } from 'child_process';
-import { CronExpressionParser } from 'cron-parser';
 import fs from 'fs';
 
 import {
   IDLE_TIMEOUT,
   MAIN_GROUP_FOLDER,
   SCHEDULER_POLL_INTERVAL,
-  TIMEZONE,
 } from './config.js';
 import { GroupPaths } from './group-paths.js';
-import { ContainerOutput, runContainerAgent } from './container-runner.js';
-import {
-  claimTask,
-  getDueTasks,
-  logTaskRun,
-  updateTaskAfterRun,
-} from './db.js';
+import { ContainerOutput, ContainerRunner } from './container-runner.js';
 import { GroupQueue } from './group-queue.js';
 import { createIdleTimer } from './idle-timer.js';
 import { logger } from './logger.js';
-import { startPollLoop } from './poll-loop.js';
-import { refreshTasksSnapshot } from './task-snapshots.js';
+import { SnapshotWriter } from './snapshot-writer.js';
+import { TaskManager } from './task-manager.js';
 import { RegisteredGroup, ScheduledTask } from './types.js';
+import { startPollLoop } from './poll-loop.js';
 
 export interface SchedulerDependencies {
   registeredGroups: () => Record<string, RegisteredGroup>;
@@ -29,12 +22,19 @@ export interface SchedulerDependencies {
   queue: GroupQueue;
   onProcess: (groupJid: string, proc: ChildProcess, containerName: string, groupFolder: string) => void;
   sendMessage: (jid: string, text: string) => Promise<void>;
+  taskManager: TaskManager;
+  snapshotWriter: SnapshotWriter;
+  containerRunner?: ContainerRunner;
 }
+
+const defaultContainerRunner = new ContainerRunner();
 
 async function runTask(
   task: ScheduledTask,
   deps: SchedulerDependencies,
 ): Promise<void> {
+  const { taskManager, snapshotWriter } = deps;
+  const containerRunner = deps.containerRunner ?? defaultContainerRunner;
   const startTime = Date.now();
   const groupDir = GroupPaths.groupDir(task.group_folder);
   fs.mkdirSync(groupDir, { recursive: true });
@@ -54,23 +54,14 @@ async function runTask(
       { taskId: task.id, groupFolder: task.group_folder },
       'Group not found for task',
     );
-    logTaskRun({
-      task_id: task.id,
-      run_at: new Date().toISOString(),
-      duration_ms: Date.now() - startTime,
-      status: 'error',
-      result: null,
-      error: `Group not found: ${task.group_folder}`,
-    });
-    // Restore next_run so the task can be retried
-    updateTaskAfterRun(task.id, task.next_run, `Error: Group not found: ${task.group_folder}`);
+    taskManager.completeRun(task, Date.now() - startTime, null, `Group not found: ${task.group_folder}`);
     return;
   }
 
   const isMain = task.group_folder === MAIN_GROUP_FOLDER;
 
   // Update tasks snapshot for container to read (filtered by group)
-  refreshTasksSnapshot(task.group_folder, isMain);
+  snapshotWriter.refreshTasks(task.group_folder, isMain);
 
   let result: string | null = null;
   let error: string | null = null;
@@ -88,7 +79,7 @@ async function runTask(
   }, IDLE_TIMEOUT);
 
   try {
-    const output = await runContainerAgent(
+    const output = await containerRunner.run(
       group,
       {
         prompt: task.prompt,
@@ -133,39 +124,13 @@ async function runTask(
   }
 
   const durationMs = Date.now() - startTime;
-
-  logTaskRun({
-    task_id: task.id,
-    run_at: new Date().toISOString(),
-    duration_ms: durationMs,
-    status: error ? 'error' : 'success',
-    result,
-    error,
-  });
-
-  let nextRun: string | null = null;
-  if (task.schedule_type === 'cron') {
-    const interval = CronExpressionParser.parse(task.schedule_value, {
-      tz: TIMEZONE,
-    });
-    nextRun = interval.next().toISOString();
-  } else if (task.schedule_type === 'interval') {
-    const ms = parseInt(task.schedule_value, 10);
-    nextRun = new Date(Date.now() + ms).toISOString();
-  }
-  // 'once' tasks have no next run
-
-  const resultSummary = error
-    ? `Error: ${error}`
-    : result
-      ? result.slice(0, 200)
-      : 'Completed';
-  updateTaskAfterRun(task.id, nextRun, resultSummary);
+  taskManager.completeRun(task, durationMs, result, error);
 }
 
 export function startSchedulerLoop(deps: SchedulerDependencies): { stop: () => void } {
+  const { taskManager } = deps;
   return startPollLoop('Scheduler', SCHEDULER_POLL_INTERVAL, async () => {
-    const dueTasks = getDueTasks();
+    const dueTasks = taskManager.getDueTasks();
     if (dueTasks.length > 0) {
       logger.info({ count: dueTasks.length }, 'Found due tasks');
     }
@@ -173,7 +138,7 @@ export function startSchedulerLoop(deps: SchedulerDependencies): { stop: () => v
     for (const task of dueTasks) {
       // Atomically claim the task by nullifying next_run.
       // Prevents duplicate execution if the task runs longer than the poll interval.
-      if (!claimTask(task.id)) {
+      if (!taskManager.claim(task.id)) {
         continue;
       }
 

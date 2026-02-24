@@ -11,6 +11,9 @@ export interface VolumeMount {
 }
 
 export interface IMountFactory {
-  /** Build the full list of volume mounts for a container run. */
+  /** Create directories, write settings, sync skills — all side effects. */
+  prepare(group: RegisteredGroup, isMain: boolean): void;
+
+  /** Build the full list of volume mounts for a container run. Pure — assumes dirs exist. */
   buildMounts(group: RegisteredGroup, isMain: boolean): VolumeMount[];
 }
