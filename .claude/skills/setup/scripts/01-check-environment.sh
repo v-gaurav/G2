@@ -77,7 +77,7 @@ if [ -f "$PROJECT_ROOT/data/registered_groups.json" ]; then
   HAS_REGISTERED_GROUPS="true"
   log "Registered groups config found (JSON)"
 elif [ -f "$PROJECT_ROOT/store/messages.db" ]; then
-  RG_COUNT=$(sqlite3 "$PROJECT_ROOT/store/messages.db" "SELECT COUNT(*) FROM registered_groups" 2>/dev/null || echo "0")
+  RG_COUNT=$(node --no-warnings -e 'const db=require("better-sqlite3")("./store/messages.db");try{console.log(db.prepare("SELECT COUNT(*) as cnt FROM registered_groups").get().cnt)}catch{console.log(0)}' 2>/dev/null || echo "0")
   if [ "$RG_COUNT" -gt 0 ] 2>/dev/null; then
     HAS_REGISTERED_GROUPS="true"
     log "Registered groups found in database ($RG_COUNT)"

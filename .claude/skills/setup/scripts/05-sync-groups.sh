@@ -56,10 +56,16 @@ if (!fs.existsSync(authDir)) {
 
 const db = new Database(dbPath);
 db.pragma('journal_mode = WAL');
-db.exec('CREATE TABLE IF NOT EXISTS chats (jid TEXT PRIMARY KEY, name TEXT, last_message_time TEXT)');
+db.exec(\`CREATE TABLE IF NOT EXISTS chats (
+  jid TEXT PRIMARY KEY,
+  name TEXT,
+  last_message_time TEXT,
+  channel TEXT,
+  is_group INTEGER DEFAULT 0
+)\`);
 
 const upsert = db.prepare(
-  'INSERT INTO chats (jid, name, last_message_time) VALUES (?, ?, ?) ON CONFLICT(jid) DO UPDATE SET name = excluded.name'
+  'INSERT INTO chats (jid, name, last_message_time, channel, is_group) VALUES (?, ?, ?, ?, ?) ON CONFLICT(jid) DO UPDATE SET name = excluded.name'
 );
 
 const { state, saveCreds } = await useMultiFileAuthState(authDir);
@@ -87,7 +93,7 @@ sock.ev.on('connection.update', async (update) => {
       let count = 0;
       for (const [jid, metadata] of Object.entries(groups)) {
         if (metadata.subject) {
-          upsert.run(jid, metadata.subject, now);
+          upsert.run(jid, metadata.subject, now, 'whatsapp', jid.endsWith('@g.us') ? 1 : 0);
           count++;
         }
       }
@@ -117,7 +123,7 @@ fi
 # Check for groups in DB
 GROUPS_IN_DB=0
 if [ -f "$PROJECT_ROOT/store/messages.db" ]; then
-  GROUPS_IN_DB=$(sqlite3 "$PROJECT_ROOT/store/messages.db" "SELECT COUNT(*) FROM chats WHERE jid LIKE '%@g.us' AND jid <> '__group_sync__'" 2>/dev/null || echo "0")
+  GROUPS_IN_DB=$(node --no-warnings -e 'const db=require("better-sqlite3")("./store/messages.db");try{console.log(db.prepare("SELECT COUNT(*) as cnt FROM chats WHERE jid LIKE \"%@g.us\" AND jid <> \"__group_sync__\"").get().cnt)}catch{console.log(0)}' 2>/dev/null || echo "0")
   log "Groups found in DB: $GROUPS_IN_DB"
 fi
 

@@ -62,7 +62,7 @@ Check the preflight results for `APPLE_CONTAINER` and `DOCKER`.
 **If the chosen runtime is Apple Container**, you MUST check whether the source code has already been converted from Docker to Apple Container. Do NOT skip this step. Run:
 
 ```bash
-grep -q "CONTAINER_RUNTIME_BIN = 'container'" src/container-runtime.ts && echo "ALREADY_CONVERTED" || echo "NEEDS_CONVERSION"
+grep -q "CONTAINER_RUNTIME_BIN = 'container'" src/execution/ContainerRuntime.ts && echo "ALREADY_CONVERTED" || echo "NEEDS_CONVERSION"
 ```
 
 **If NEEDS_CONVERSION**, the source code still uses Docker as the runtime. You MUST run the `/convert-to-apple-container` skill NOW, before proceeding to the build step.
@@ -84,9 +84,9 @@ Run `./.claude/skills/setup/scripts/03-setup-container.sh --runtime <chosen>` an
 
 ## 4. Claude Authentication (No Script)
 
-If HAS_ENV=true from step 1, read `.env` and check if it already has `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`. If so, confirm with user: "You already have Claude credentials configured. Want to keep them or reconfigure?" If keeping, skip to step 5.
+If HAS_ENV=true from step 1, read `.env` and check if it already has `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`, or `CLAUDE_CODE_USE_BEDROCK`. If so, confirm with user: "You already have Claude credentials configured. Want to keep them or reconfigure?" If keeping, skip to step 5.
 
-AskUserQuestion: Claude subscription (Pro/Max) vs Anthropic API key?
+AskUserQuestion: Claude subscription (Pro/Max) vs Anthropic API key vs AWS Bedrock?
 
 **Subscription:** Tell the user:
 1. Open another terminal and run: `claude setup-token`
@@ -97,6 +97,8 @@ AskUserQuestion: Claude subscription (Pro/Max) vs Anthropic API key?
 Do NOT ask the user to paste the token into the chat. Do NOT use AskUserQuestion to collect the token. Just tell them what to do, then wait for confirmation that they've added it to `.env`. Once confirmed, verify the `.env` file has the key.
 
 **API key:** Tell the user to add `ANTHROPIC_API_KEY=<key>` to the `.env` file in the project root, then let you know when done. Once confirmed, verify the `.env` file has the key.
+
+**AWS Bedrock:** Add `CLAUDE_CODE_USE_BEDROCK=1` and `AWS_REGION=<region>` to the `.env` file. AWS credentials are passed through from the host environment (via `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`). Verify AWS credentials work by running `aws sts get-caller-identity`. The container runner automatically forwards these environment variables into agent containers.
 
 ## 5. WhatsApp Authentication
 
@@ -209,7 +211,7 @@ Show the log tail command: `tail -f logs/g2.log`
 
 **Container agent fails ("Claude Code process exited with code 1"):** Ensure the container runtime is running — start it with the appropriate command for your runtime. Check container logs in `groups/main/logs/container-*.log`.
 
-**No response to messages:** Verify the trigger pattern matches. Main channel and personal/solo chats don't need a prefix. Check the registered JID in the database: `sqlite3 store/messages.db "SELECT * FROM registered_groups"`. Check `logs/g2.log`.
+**No response to messages:** Verify the trigger pattern matches. Main channel and personal/solo chats don't need a prefix. Check the registered JID in the database: `node --no-warnings -e 'const db=require("better-sqlite3")("./store/messages.db");console.log(JSON.stringify(db.prepare("SELECT * FROM registered_groups").all(),null,2))'`. Check `logs/g2.log`.
 
 **Messages sent but not received (DMs):** WhatsApp may use LID (Linked Identity) JIDs. Check logs for LID translation. Verify the registered JID has no device suffix (should be `number@s.whatsapp.net`, not `number:0@s.whatsapp.net`).
 

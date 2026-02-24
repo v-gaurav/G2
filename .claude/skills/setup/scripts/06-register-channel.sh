@@ -51,12 +51,37 @@ log "Registering channel: jid=$JID name=$NAME trigger=$TRIGGER folder=$FOLDER re
 # Create data directory
 mkdir -p "$PROJECT_ROOT/data"
 
-# Write directly to SQLite (the DB and schema exist from the sync-groups step)
+# Write directly to SQLite using better-sqlite3 via Node.js
 TIMESTAMP=$(date -u '+%Y-%m-%dT%H:%M:%S.000Z')
-DB_PATH="$PROJECT_ROOT/store/messages.db"
 REQUIRES_TRIGGER_INT=$( [ "$REQUIRES_TRIGGER" = "true" ] && echo 1 || echo 0 )
 
-sqlite3 "$DB_PATH" "INSERT OR REPLACE INTO registered_groups (jid, name, folder, trigger_pattern, added_at, container_config, requires_trigger) VALUES ('$JID', '$NAME', '$FOLDER', '$TRIGGER', '$TIMESTAMP', NULL, $REQUIRES_TRIGGER_INT);"
+node --no-warnings -e "
+const Database = require('better-sqlite3');
+const db = new Database('./store/messages.db');
+db.pragma('journal_mode = WAL');
+
+// Ensure the registered_groups table exists
+db.exec(\`CREATE TABLE IF NOT EXISTS registered_groups (
+  jid TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  folder TEXT NOT NULL UNIQUE,
+  trigger_pattern TEXT NOT NULL,
+  added_at TEXT NOT NULL,
+  container_config TEXT,
+  requires_trigger INTEGER DEFAULT 1
+)\`);
+
+// Add channel column if it doesn't exist (migration)
+try { db.exec('ALTER TABLE registered_groups ADD COLUMN channel TEXT DEFAULT \\'whatsapp\\''); } catch {}
+
+db.prepare(
+  'INSERT OR REPLACE INTO registered_groups (jid, name, folder, trigger_pattern, added_at, container_config, requires_trigger, channel) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+).run('$JID', '$NAME', '$FOLDER', '$TRIGGER', '$TIMESTAMP', null, $REQUIRES_TRIGGER_INT, 'whatsapp');
+
+const row = db.prepare('SELECT * FROM registered_groups WHERE jid = ?').get('$JID');
+console.log('Registered:', JSON.stringify(row));
+db.close();
+"
 
 log "Wrote registration to SQLite"
 
@@ -71,18 +96,30 @@ if [ "$ASSISTANT_NAME" != "G2" ]; then
 
   for md_file in groups/global/CLAUDE.md groups/main/CLAUDE.md; do
     if [ -f "$PROJECT_ROOT/$md_file" ]; then
-      sed -i '' "s/^# G2$/# $ASSISTANT_NAME/" "$PROJECT_ROOT/$md_file"
-      sed -i '' "s/You are G2/You are $ASSISTANT_NAME/g" "$PROJECT_ROOT/$md_file"
+      # Use sed -i with platform detection (GNU sed vs BSD sed)
+      if sed --version >/dev/null 2>&1; then
+        # GNU sed (Linux)
+        sed -i "s/^# G2$/# $ASSISTANT_NAME/" "$PROJECT_ROOT/$md_file"
+        sed -i "s/You are G2/You are $ASSISTANT_NAME/g" "$PROJECT_ROOT/$md_file"
+      else
+        # BSD sed (macOS)
+        sed -i '' "s/^# G2$/# $ASSISTANT_NAME/" "$PROJECT_ROOT/$md_file"
+        sed -i '' "s/You are G2/You are $ASSISTANT_NAME/g" "$PROJECT_ROOT/$md_file"
+      fi
       log "Updated $md_file"
     else
       log "WARNING: $md_file not found, skipping name update"
     fi
   done
 
-  # Add ASSISTANT_NAME to .env so config.ts picks it up
+  # Add ASSISTANT_NAME to .env so Config.ts picks it up
   ENV_FILE="$PROJECT_ROOT/.env"
   if [ -f "$ENV_FILE" ] && grep -q '^ASSISTANT_NAME=' "$ENV_FILE"; then
-    sed "s|^ASSISTANT_NAME=.*|ASSISTANT_NAME=\"$ASSISTANT_NAME\"|" "$ENV_FILE" > "$ENV_FILE.tmp" && mv "$ENV_FILE.tmp" "$ENV_FILE"
+    if sed --version >/dev/null 2>&1; then
+      sed -i "s|^ASSISTANT_NAME=.*|ASSISTANT_NAME=\"$ASSISTANT_NAME\"|" "$ENV_FILE"
+    else
+      sed -i '' "s|^ASSISTANT_NAME=.*|ASSISTANT_NAME=\"$ASSISTANT_NAME\"|" "$ENV_FILE"
+    fi
   else
     echo "ASSISTANT_NAME=\"$ASSISTANT_NAME\"" >> "$ENV_FILE"
   fi
