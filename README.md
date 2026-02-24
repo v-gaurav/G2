@@ -2,7 +2,7 @@
   <img src="https://raw.githubusercontent.com/v-gaurav/G2/main/assets/g2-logo.svg" alt="G2" width="400">
 </p>
 
-<p align="center">
+<p align="left">
   My personal Claude assistant that runs securely in containers. Inspired by <a href="https://github.com/qwibitai/nanoclaw">NanoClaw</a>, rebuilt as my own.
 </p>
 
