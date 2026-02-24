@@ -40,11 +40,6 @@ vi.mock('fs', async () => {
   };
 });
 
-// Mock child_process (used for osascript notification)
-vi.mock('child_process', () => ({
-  exec: vi.fn(),
-}));
-
 // Build a fake WASocket that's an EventEmitter with the methods we need
 function createFakeSocket() {
   const ev = new EventEmitter();
@@ -775,7 +770,7 @@ describe('WhatsAppChannel', () => {
 
       await connectChannel(channel);
 
-      await channel.syncGroupMetadata(true);
+      await channel.syncMetadata(true);
 
       expect(fakeSocket.groupFetchAllParticipating).toHaveBeenCalled();
       expect(updateChatName).toHaveBeenCalledWith('group@g.us', 'Forced Group');
@@ -792,7 +787,7 @@ describe('WhatsAppChannel', () => {
       await connectChannel(channel);
 
       // Should not throw
-      await expect(channel.syncGroupMetadata(true)).resolves.toBeUndefined();
+      await expect(channel.syncMetadata(true)).resolves.toBeUndefined();
     });
 
     it('skips groups with no subject', async () => {
@@ -810,7 +805,7 @@ describe('WhatsAppChannel', () => {
       // Clear any calls from the automatic sync on connect
       vi.mocked(updateChatName).mockClear();
 
-      await channel.syncGroupMetadata(true);
+      await channel.syncMetadata(true);
 
       expect(updateChatName).toHaveBeenCalledTimes(1);
       expect(updateChatName).toHaveBeenCalledWith('group1@g.us', 'Has Subject');

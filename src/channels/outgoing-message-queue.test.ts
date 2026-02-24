@@ -87,7 +87,7 @@ describe('OutgoingMessageQueue', () => {
       expect(sent).toEqual(['msg1', 'msg2']);
     });
 
-    it('resets flushing flag on sender error', async () => {
+    it('resets flushing flag on sender error and retains failed message', async () => {
       const queue = new OutgoingMessageQueue();
       queue.enqueue('jid1', 'will-fail');
       queue.enqueue('jid2', 'never-sent');
@@ -96,15 +96,13 @@ describe('OutgoingMessageQueue', () => {
 
       await expect(queue.flush(sender)).rejects.toThrow('send failed');
 
-      // Flushing flag should be reset, allowing future flushes
+      // Flushing flag should be reset, allowing future flushes.
+      // The failed message (will-fail) stays in the queue along with never-sent.
       queue.enqueue('jid3', 'retry');
       const sent: string[] = [];
       await queue.flush(async (_jid, text) => { sent.push(text); });
 
-      // jid2 was consumed from queue by shift() before jid1 error, so only jid3 remains
-      // Actually: jid1 was shifted and sent (failed), then error propagates.
-      // jid2 remains in queue + jid3 was enqueued
-      expect(sent).toEqual(['never-sent', 'retry']);
+      expect(sent).toEqual(['will-fail', 'never-sent', 'retry']);
     });
 
     it('allows flush after a successful flush', async () => {

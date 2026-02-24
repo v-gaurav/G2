@@ -30,6 +30,15 @@ describe('ChannelRegistry', () => {
       registry.register(makeChannel({ name: 'telegram' }));
       expect(registry.getAll()).toHaveLength(2);
     });
+
+    it('rejects duplicate channel names', () => {
+      const registry = new ChannelRegistry();
+      registry.register(makeChannel({ name: 'whatsapp' }));
+      expect(() => registry.register(makeChannel({ name: 'whatsapp' }))).toThrow(
+        'Channel "whatsapp" is already registered',
+      );
+      expect(registry.getAll()).toHaveLength(1);
+    });
   });
 
   describe('findByJid', () => {
@@ -115,6 +124,30 @@ describe('ChannelRegistry', () => {
     it('returns empty array when no channels registered', () => {
       const registry = new ChannelRegistry();
       expect(registry.getAll()).toEqual([]);
+    });
+  });
+
+  describe('syncAllMetadata', () => {
+    it('calls syncMetadata on channels that implement it', async () => {
+      const registry = new ChannelRegistry();
+      const withSync = makeChannel({
+        name: 'whatsapp',
+        syncMetadata: vi.fn(async () => {}),
+      });
+      const withoutSync = makeChannel({ name: 'telegram' });
+      registry.register(withSync);
+      registry.register(withoutSync);
+
+      await registry.syncAllMetadata(true);
+
+      expect(withSync.syncMetadata).toHaveBeenCalledWith(true);
+    });
+
+    it('does nothing when no channels have syncMetadata', async () => {
+      const registry = new ChannelRegistry();
+      registry.register(makeChannel({ name: 'basic' }));
+      await registry.syncAllMetadata();
+      // No error thrown
     });
   });
 

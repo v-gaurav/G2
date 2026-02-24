@@ -126,7 +126,6 @@ g2/
 │   │   ├── index.ts               # Exports all handlers
 │   │   ├── types.ts               # IpcCommandHandler interface
 │   │   ├── dispatcher.ts          # Routes IPC commands to handlers
-│   │   ├── types.ts               # IpcCommandHandler interface
 │   │   ├── schedule-task.ts       # Handle schedule_task command
 │   │   ├── register-group.ts      # Handle register_group command
 │   │   ├── pause-task.ts          # Handle pause_task command
@@ -174,14 +173,18 @@ g2/
 │       ├── customize/SKILL.md          # /customize - Add capabilities
 │       ├── debug/SKILL.md              # /debug - Container debugging
 │       ├── add-telegram/SKILL.md       # /add-telegram - Telegram channel
+│       ├── add-telegram-swarm/SKILL.md # /add-telegram-swarm - Agent swarm for Telegram
+│       ├── add-discord/SKILL.md        # /add-discord - Discord channel
 │       ├── add-gmail/SKILL.md          # /add-gmail - Gmail integration
 │       ├── add-voice-transcription/    # /add-voice-transcription - Whisper
 │       ├── x-integration/SKILL.md      # /x-integration - X/Twitter
 │       ├── convert-to-apple-container/  # /convert-to-apple-container - Apple Container runtime
-│       └── add-parallel/SKILL.md       # /add-parallel - Parallel agents
+│       ├── add-parallel/SKILL.md       # /add-parallel - Parallel agents
+│       └── sync-docs/SKILL.md          # /sync-docs - Sync docs after refactoring
 │
 ├── groups/
-│   ├── CLAUDE.md                  # Global memory (all groups read this)
+│   ├── global/                    # Global memory (read by all groups)
+│   │   └── CLAUDE.md              # Shared preferences, facts, context
 │   ├── main/                      # Self-chat (main control channel)
 │   │   ├── CLAUDE.md              # Main channel memory
 │   │   └── logs/                  # Task execution logs
@@ -192,12 +195,12 @@ g2/
 │
 ├── store/                         # Local data (gitignored)
 │   ├── auth/                      # WhatsApp authentication state
-│   └── messages.db                # SQLite database (messages, chats, scheduled_tasks, task_run_logs, registered_groups, sessions, router_state)
+│   └── messages.db                # SQLite database (messages, chats, scheduled_tasks, task_run_logs, registered_groups, sessions, conversation_archives, router_state)
 │
 ├── data/                          # Application state (gitignored)
 │   ├── sessions/                  # Per-group session data (.claude/ dirs with JSONL transcripts)
 │   ├── env/env                    # Copy of .env for container mounting
-│   └── ipc/                       # Container IPC (messages/, tasks/)
+│   └── ipc/                       # Container IPC (messages/, tasks/, input/, responses/)
 │
 ├── logs/                          # Runtime logs (gitignored)
 │   ├── g2.log               # Host stdout
@@ -216,25 +219,35 @@ Configuration constants are in `src/config.ts`:
 
 ```typescript
 import path from 'path';
+import { readEnvFile } from './env.js';
 
-export const ASSISTANT_NAME = process.env.ASSISTANT_NAME || 'G2';
+const envConfig = readEnvFile(['ASSISTANT_NAME', 'ASSISTANT_HAS_OWN_NUMBER']);
+
+export const ASSISTANT_NAME = process.env.ASSISTANT_NAME || envConfig.ASSISTANT_NAME || 'G2';
+export const ASSISTANT_HAS_OWN_NUMBER =
+  (process.env.ASSISTANT_HAS_OWN_NUMBER || envConfig.ASSISTANT_HAS_OWN_NUMBER) === 'true';
 export const POLL_INTERVAL = 2000;
 export const SCHEDULER_POLL_INTERVAL = 60000;
 
-// Paths are absolute (required for container mounts)
+// Absolute paths needed for container mounts
 const PROJECT_ROOT = process.cwd();
+const HOME_DIR = process.env.HOME || '/Users/user';
+
+export const MOUNT_ALLOWLIST_PATH = path.join(HOME_DIR, '.config', 'g2', 'mount-allowlist.json');
 export const STORE_DIR = path.resolve(PROJECT_ROOT, 'store');
 export const GROUPS_DIR = path.resolve(PROJECT_ROOT, 'groups');
 export const DATA_DIR = path.resolve(PROJECT_ROOT, 'data');
+export const MAIN_GROUP_FOLDER = 'main';
 
-// Container configuration
 export const CONTAINER_IMAGE = process.env.CONTAINER_IMAGE || 'g2-agent:latest';
-export const CONTAINER_TIMEOUT = parseInt(process.env.CONTAINER_TIMEOUT || '1800000', 10); // 30min default
+export const CONTAINER_TIMEOUT = parseInt(process.env.CONTAINER_TIMEOUT || '1800000', 10);
+export const CONTAINER_MAX_OUTPUT_SIZE = parseInt(process.env.CONTAINER_MAX_OUTPUT_SIZE || '10485760', 10); // 10MB
 export const IPC_POLL_INTERVAL = 1000; // Base interval; IPC watcher uses fs.watch with 10x fallback poll
-export const IDLE_TIMEOUT = parseInt(process.env.IDLE_TIMEOUT || '1800000', 10); // 30min — keep container alive after last result
+export const IDLE_TIMEOUT = parseInt(process.env.IDLE_TIMEOUT || '1800000', 10); // 30min
 export const MAX_CONCURRENT_CONTAINERS = Math.max(1, parseInt(process.env.MAX_CONCURRENT_CONTAINERS || '5', 10) || 5);
 
-export const TRIGGER_PATTERN = new RegExp(`^@${ASSISTANT_NAME}\\b`, 'i');
+export const TRIGGER_PATTERN = new RegExp(`^@${escapeRegex(ASSISTANT_NAME)}\\b`, 'i');
+export const TIMEZONE = resolveTimezone(); // System timezone, falls back to UTC
 ```
 
 **Note:** Paths must be absolute for container volume mounts to work correctly.
@@ -312,21 +325,21 @@ G2 uses a hierarchical memory system based on CLAUDE.md files.
 
 | Level | Location | Read By | Written By | Purpose |
 |-------|----------|---------|------------|---------|
-| **Global** | `groups/CLAUDE.md` | All groups | Main only | Preferences, facts, context shared across all conversations |
+| **Global** | `groups/global/CLAUDE.md` | All groups | Main only | Preferences, facts, context shared across all conversations |
 | **Group** | `groups/{name}/CLAUDE.md` | That group | That group | Group-specific context, conversation memory |
 | **Files** | `groups/{name}/*.md` | That group | That group | Notes, research, documents created during conversation |
 
 ### How Memory Works
 
 1. **Agent Context Loading**
-   - Agent runs with `cwd` set to `groups/{group-name}/`
-   - Claude Agent SDK with `settingSources: ['project']` automatically loads:
-     - `../CLAUDE.md` (parent directory = global memory)
-     - `./CLAUDE.md` (current directory = group memory)
+   - Agent runs with `cwd` set to `/workspace/group` (mounted from `groups/{group-name}/`)
+   - `./CLAUDE.md` in the working directory = group memory
+   - For non-main groups, `groups/global/` is mounted at `/workspace/global` (read-only). Claude Code loads `CLAUDE.md` files from additional directories via the `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD` setting.
+   - For main groups, the project root is mounted at `/workspace/project`, giving access to all group memory
 
 2. **Writing Memory**
-   - When user says "remember this", agent writes to `./CLAUDE.md`
-   - When user says "remember this globally" (main channel only), agent writes to `../CLAUDE.md`
+   - When user says "remember this", agent writes to `./CLAUDE.md` in the group folder
+   - When user says "remember this globally" (main channel only), agent writes to `groups/global/CLAUDE.md`
    - Agent can create files like `notes.md`, `research.md` in the group folder
 
 3. **Main Channel Privileges**

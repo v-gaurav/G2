@@ -50,6 +50,7 @@ Read every documentation file that references codebase structure:
 | `CLAUDE.md` | Key Files tables — every non-test `src/` file should appear |
 | `README.md` | Architecture "Key files" list, philosophy language |
 | `docs/ARCHITECTURE.md` | Layer descriptions, mount tables, IPC commands, SQLite tables, startup sequence — must match actual source |
+| `docs/CHANNEL-MANAGEMENT.md` | Channel interface, registry, JID routing, WhatsApp implementation, message queue, metadata sync, inbound/outbound flow, database schema — must match `src/types.ts`, `src/channel-registry.ts`, `src/channels/whatsapp.ts`, `src/channels/outgoing-message-queue.ts`, `src/channels/whatsapp-metadata-sync.ts`, `src/router.ts`, `src/authorization.ts`, `src/db.ts`, `src/config.ts`, `src/index.ts` |
 | `docs/HEARTBEAT.md` | Polling loop intervals, timing constants, scheduler flow, GroupQueue behavior, idle timer, IPC watcher mechanism — must match `src/config.ts`, `src/task-scheduler.ts`, `src/ipc.ts`, `src/group-queue.ts`, `src/poll-loop.ts`, `src/idle-timer.ts`, `src/ipc-transport.ts`, `src/task-snapshots.ts` |
 | `docs/MEMORY.md` | Session management flow, archive/restore lifecycle, IPC handlers for sessions, DB schema — must match `src/session-manager.ts`, `src/db.ts`, `src/ipc-handlers/clear-session.ts`, `src/ipc-handlers/resume-session.ts`, `src/ipc-handlers/search-sessions.ts`, `src/ipc-handlers/archive-session.ts` |
 | `docs/SPEC.md` | Folder Structure tree — must mirror actual `src/` layout |
@@ -74,6 +75,7 @@ Compare the `find src` output against what's listed in:
 Also check domain-specific docs reference the correct source files:
 - `docs/HEARTBEAT.md` — polling loop, scheduler, queue, IPC, and utility files
 - `docs/MEMORY.md` — session manager, archive handlers, DB functions
+- `docs/CHANNEL-MANAGEMENT.md` — channel interface, registry, WhatsApp channel, message queue, metadata sync, router, authorization, DB schema
 
 Every non-test `.ts` file in `src/` should appear in both. If a file is missing from the docs, add it with an accurate description based on reading its exports.
 
@@ -135,6 +137,7 @@ For each issue found, make the edit directly. Follow these rules:
 - **docs/ARCHITECTURE.md**: Layer descriptions must reference actual source files. Mount tables must match `DefaultMountFactory` logic. IPC command table must match handlers in `src/ipc-handlers/`. SQLite table list must match `src/db.ts` schema. Authorization matrix must match `src/authorization.ts`. Startup sequence must match `main()` in `src/index.ts`. Config values (intervals, timeouts, concurrency limits) must match `src/config.ts`.
 - **docs/SPEC.md**: The Folder Structure tree must show every file and directory exactly as they exist on disk.
 - **docs/HEARTBEAT.md**: Polling intervals must match `src/config.ts` constants (`POLL_INTERVAL`, `SCHEDULER_POLL_INTERVAL`, `IPC_POLL_INTERVAL`, `IDLE_TIMEOUT`, `CONTAINER_TIMEOUT`, `MAX_CONCURRENT_CONTAINERS`). Scheduler flow must match `src/task-scheduler.ts` (`startSchedulerLoop`, `runTask`, `claimTask` usage). IPC watcher mechanism must match `src/ipc.ts` (fs.watch vs polling, fallback interval). GroupQueue behavior must match `src/group-queue.ts` (enqueue/drain logic, `IpcTransport` usage, `Set` vs array for `waitingGroups`). Idle timer description must match `src/idle-timer.ts`. Task snapshot helper must match `src/task-snapshots.ts`. DB functions referenced (`getDueTasks`, `claimTask`, `updateTaskAfterRun`, `logTaskRun`) must match `src/db.ts`.
+- **docs/CHANNEL-MANAGEMENT.md**: Channel interface must match `src/types.ts` (`Channel`, `OnInboundMessage`, `OnChatMetadata`). Registry methods must match `src/channel-registry.ts`. WhatsApp implementation details (connection, reconnection, LID translation, bot detection, typing) must match `src/channels/whatsapp.ts`. Outgoing queue behavior must match `src/channels/outgoing-message-queue.ts`. Metadata sync timing and cache logic must match `src/channels/whatsapp-metadata-sync.ts`. Outbound formatting must match `src/router.ts`. Authorization matrix must match `src/authorization.ts`. Database schema must match `src/db.ts`. Config constants (`ASSISTANT_NAME`, `ASSISTANT_HAS_OWN_NUMBER`, `STORE_DIR`) must match `src/config.ts`. Initialization and shutdown sequence must match `src/index.ts`.
 - **docs/MEMORY.md**: Session management flow must match `src/session-manager.ts`. DB tables (`sessions`, `session_history`, `conversation_archives`) must match `src/db.ts` schema. Archive/restore lifecycle must match IPC handlers: `src/ipc-handlers/clear-session.ts`, `src/ipc-handlers/resume-session.ts`, `src/ipc-handlers/search-sessions.ts`, `src/ipc-handlers/archive-session.ts`, `src/ipc-handlers/archive-utils.ts`. Container-side behavior must match `container/agent-runner/src/index.ts` (PreCompact hook, session resume).
 - **docs/REQUIREMENTS.md**: The Design Patterns section should name actual classes/interfaces/functions. Architecture Decisions subsections should reference the modules that implement them.
 - **Language fixes**: Replace stale phrases with accurate ones. Don't overstate or understate the codebase size.
@@ -145,12 +148,12 @@ After all edits, do a final sanity check:
 
 ```bash
 # Every src/ file path mentioned in docs should exist
-grep -Eoh 'src/[a-zA-Z0-9_/.-]+\.ts' CLAUDE.md README.md docs/ARCHITECTURE.md docs/HEARTBEAT.md docs/MEMORY.md docs/SPEC.md docs/REQUIREMENTS.md | sort -u | while read f; do
+grep -Eoh 'src/[a-zA-Z0-9_/.-]+\.ts' CLAUDE.md README.md docs/ARCHITECTURE.md docs/CHANNEL-MANAGEMENT.md docs/HEARTBEAT.md docs/MEMORY.md docs/SPEC.md docs/REQUIREMENTS.md | sort -u | while read f; do
   [ -f "$f" ] || echo "BROKEN REF: $f"
 done
 
 # Every container/ path mentioned in docs should exist
-grep -Eoh 'container/[a-zA-Z0-9_/.-]+\.[a-z]+' CLAUDE.md README.md docs/ARCHITECTURE.md docs/HEARTBEAT.md docs/MEMORY.md docs/SPEC.md docs/REQUIREMENTS.md | sort -u | while read f; do
+grep -Eoh 'container/[a-zA-Z0-9_/.-]+\.[a-z]+' CLAUDE.md README.md docs/ARCHITECTURE.md docs/CHANNEL-MANAGEMENT.md docs/HEARTBEAT.md docs/MEMORY.md docs/SPEC.md docs/REQUIREMENTS.md | sort -u | while read f; do
   [ -f "$f" ] || echo "BROKEN REF: $f"
 done
 ```
@@ -165,4 +168,4 @@ If any broken refs remain, fix them.
 - Does not update `docs/g2-skills-architecture.md` (skills system architecture, not source structure)
 - Does not modify source code — only documentation files
 
-**Note:** `docs/ARCHITECTURE.md`, `docs/HEARTBEAT.md`, and `docs/MEMORY.md` ARE in scope — they document the runtime system architecture and must stay in sync with the source code.
+**Note:** `docs/ARCHITECTURE.md`, `docs/CHANNEL-MANAGEMENT.md`, `docs/HEARTBEAT.md`, and `docs/MEMORY.md` ARE in scope — they document the runtime system architecture and must stay in sync with the source code.

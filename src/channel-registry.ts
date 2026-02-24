@@ -4,6 +4,9 @@ export class ChannelRegistry {
   private channels: Channel[] = [];
 
   register(channel: Channel): void {
+    if (this.channels.some(c => c.name === channel.name)) {
+      throw new Error(`Channel "${channel.name}" is already registered`);
+    }
     this.channels.push(channel);
   }
 
@@ -17,6 +20,14 @@ export class ChannelRegistry {
 
   getAll(): Channel[] {
     return [...this.channels];
+  }
+
+  async syncAllMetadata(force?: boolean): Promise<void> {
+    for (const channel of this.channels) {
+      if (channel.syncMetadata) {
+        await channel.syncMetadata(force);
+      }
+    }
   }
 
   async disconnectAll(): Promise<void> {

@@ -250,7 +250,7 @@ SQLite database (`store/messages.db`). Containers have no direct DB access — a
 | `scheduled_tasks` | Task definitions (schedule_type, next_run, status) |
 | `task_run_logs` | Execution history per task run |
 | `sessions` | Active Claude session ID per group |
-| `session_history` | Archived sessions for restore |
+| `conversation_archives` | Archived sessions for restore |
 | `router_state` | Polling cursors (last_timestamp, last_agent_timestamp) |
 
 ---

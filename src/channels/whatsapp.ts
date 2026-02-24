@@ -1,4 +1,3 @@
-import { exec } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
@@ -32,6 +31,7 @@ export class WhatsAppChannel implements Channel {
   private lidToPhoneMap: Record<string, string> = {};
   private messageQueue = new OutgoingMessageQueue();
   private metadataSync = new WhatsAppMetadataSync(GROUP_SYNC_INTERVAL_MS);
+  private reconnectAttempt = 0;
 
   private opts: WhatsAppChannelOpts;
 
@@ -65,12 +65,7 @@ export class WhatsAppChannel implements Channel {
       const { connection, lastDisconnect, qr } = update;
 
       if (qr) {
-        const msg =
-          'WhatsApp authentication required. Run /setup in Claude Code.';
-        logger.error(msg);
-        exec(
-          `osascript -e 'display notification "${msg}" with title "G2" sound name "Basso"'`,
-        );
+        logger.error('WhatsApp authentication required. Run /setup in Claude Code.');
         setTimeout(() => process.exit(1), 1000);
       }
 
@@ -81,54 +76,14 @@ export class WhatsAppChannel implements Channel {
         logger.info({ reason, shouldReconnect, queuedMessages: this.messageQueue.size }, 'Connection closed');
 
         if (shouldReconnect) {
-          logger.info('Reconnecting...');
-          this.connectInternal().catch((err) => {
-            logger.error({ err }, 'Failed to reconnect, retrying in 5s');
-            setTimeout(() => {
-              this.connectInternal().catch((err2) => {
-                logger.error({ err: err2 }, 'Reconnection retry failed');
-              });
-            }, 5000);
-          });
+          this.reconnectWithBackoff();
         } else {
           logger.info('Logged out. Run /setup to re-authenticate.');
           process.exit(0);
         }
       } else if (connection === 'open') {
-        this.connected = true;
-        logger.info('Connected to WhatsApp');
-
-        // Announce availability so WhatsApp relays subsequent presence updates (typing indicators)
-        this.sock.sendPresenceUpdate('available').catch(() => {});
-
-        // Build LID to phone mapping from auth state for self-chat translation
-        if (this.sock.user) {
-          const phoneUser = this.sock.user.id.split(':')[0];
-          const lidUser = this.sock.user.lid?.split(':')[0];
-          if (lidUser && phoneUser) {
-            this.lidToPhoneMap[lidUser] = `${phoneUser}@s.whatsapp.net`;
-            logger.debug({ lidUser, phoneUser }, 'LID to phone mapping set');
-          }
-        }
-
-        // Flush any messages queued while disconnected
-        this.flushOutgoingQueue().catch((err) =>
-          logger.error({ err }, 'Failed to flush outgoing queue'),
-        );
-
-        // Sync group metadata on startup (respects 24h cache)
-        const fetchGroups = () => this.sock.groupFetchAllParticipating();
-        this.metadataSync.sync(fetchGroups).catch((err) =>
-          logger.error({ err }, 'Initial group sync failed'),
-        );
-        // Set up daily sync timer (only once)
-        this.metadataSync.startPeriodicSync(fetchGroups);
-
-        // Signal first connection to caller
-        if (onFirstOpen) {
-          onFirstOpen();
-          onFirstOpen = undefined;
-        }
+        this.onConnectionOpen(onFirstOpen);
+        onFirstOpen = undefined;
       }
     });
 
@@ -240,11 +195,73 @@ export class WhatsAppChannel implements Channel {
    * Fetches all participating groups and stores their names in the database.
    * Called on startup, daily, and on-demand via IPC.
    */
-  async syncGroupMetadata(force = false): Promise<void> {
+  async syncMetadata(force = false): Promise<void> {
     return this.metadataSync.sync(
       () => this.sock.groupFetchAllParticipating(),
       force,
     );
+  }
+
+  private onConnectionOpen(onFirstOpen?: () => void): void {
+    this.connected = true;
+    logger.info('Connected to WhatsApp');
+
+    // Announce availability so WhatsApp relays subsequent presence updates (typing indicators)
+    this.sock.sendPresenceUpdate('available').catch(() => {});
+
+    // Build LID to phone mapping from auth state for self-chat translation
+    if (this.sock.user) {
+      const phoneUser = this.sock.user.id.split(':')[0];
+      const lidUser = this.sock.user.lid?.split(':')[0];
+      if (lidUser && phoneUser) {
+        this.lidToPhoneMap[lidUser] = `${phoneUser}@s.whatsapp.net`;
+        logger.debug({ lidUser, phoneUser }, 'LID to phone mapping set');
+      }
+    }
+
+    // Flush any messages queued while disconnected
+    this.flushOutgoingQueue().catch((err) =>
+      logger.error({ err }, 'Failed to flush outgoing queue'),
+    );
+
+    // Sync group metadata on startup (respects 24h cache)
+    const fetchGroups = () => this.sock.groupFetchAllParticipating();
+    this.metadataSync.sync(fetchGroups).catch((err) =>
+      logger.error({ err }, 'Initial group sync failed'),
+    );
+    // Set up daily sync timer (only once)
+    this.metadataSync.startPeriodicSync(fetchGroups);
+
+    // Reset reconnect counter on successful connection
+    this.reconnectAttempt = 0;
+
+    // Signal first connection to caller
+    if (onFirstOpen) {
+      onFirstOpen();
+    }
+  }
+
+  private reconnectWithBackoff(): void {
+    const MAX_RETRIES = 10;
+    const BASE_DELAY_MS = 2000;
+    const MAX_DELAY_MS = 60000;
+
+    if (this.reconnectAttempt >= MAX_RETRIES) {
+      logger.error({ attempts: MAX_RETRIES }, 'Reconnection attempts exhausted');
+      return;
+    }
+
+    const delay = Math.min(BASE_DELAY_MS * Math.pow(2, this.reconnectAttempt), MAX_DELAY_MS);
+    this.reconnectAttempt++;
+
+    logger.info({ attempt: this.reconnectAttempt, delayMs: delay }, 'Reconnecting with backoff');
+
+    setTimeout(() => {
+      this.connectInternal().catch((err) => {
+        logger.error({ err, attempt: this.reconnectAttempt }, 'Reconnection attempt failed');
+        this.reconnectWithBackoff();
+      });
+    }, delay);
   }
 
   private async translateJid(jid: string): Promise<string> {

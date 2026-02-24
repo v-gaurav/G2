@@ -20,8 +20,9 @@ export class OutgoingMessageQueue {
     this.flushing = true;
     try {
       while (this.queue.length > 0) {
-        const item = this.queue.shift()!;
+        const item = this.queue[0];        // peek
         await sender(item.jid, item.text);
+        this.queue.shift();                // remove only after success
       }
     } finally {
       this.flushing = false;

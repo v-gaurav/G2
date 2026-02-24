@@ -1,6 +1,6 @@
 # G2
 
-Personal Claude assistant. See [README.md](README.md) for philosophy and setup. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for system architecture. See [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) for architecture decisions. See [docs/HEARTBEAT.md](docs/HEARTBEAT.md) for the polling loops and task scheduler.
+Personal Claude assistant. See [README.md](README.md) for philosophy and setup. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for system architecture. See [docs/CHANNEL-MANAGEMENT.md](docs/CHANNEL-MANAGEMENT.md) for channel architecture. See [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) for architecture decisions. See [docs/HEARTBEAT.md](docs/HEARTBEAT.md) for the polling loops and task scheduler.
 
 ## Quick Context
 

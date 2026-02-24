@@ -10,6 +10,7 @@ import {
 } from './config.js';
 import { ChannelRegistry } from './channel-registry.js';
 import { WhatsAppChannel } from './channels/whatsapp.js';
+import type { Channel } from './types.js';
 import {
   ContainerOutput,
   runContainerAgent,
@@ -47,7 +48,7 @@ const sessionManager = new SessionManager();
 let registeredGroups: Record<string, RegisteredGroup> = {};
 let lastAgentTimestamp: Record<string, string> = {};
 
-let whatsapp: WhatsAppChannel;
+let whatsapp: Channel;
 const channelRegistry = new ChannelRegistry();
 const queue = new GroupQueue();
 
@@ -427,7 +428,7 @@ async function main(): Promise<void> {
     },
     registeredGroups: () => registeredGroups,
     registerGroup,
-    syncGroupMetadata: (force) => whatsapp?.syncGroupMetadata(force) ?? Promise.resolve(),
+    syncGroupMetadata: (force) => channelRegistry.syncAllMetadata(force),
     getAvailableGroups,
     writeGroupsSnapshot: (groupFolder, isMain, availableGroups, registeredJids) => writeGroupsSnapshot(groupFolder, isMain, availableGroups, registeredJids),
     sessionManager,
