@@ -2,13 +2,13 @@
   <img src="https://raw.githubusercontent.com/v-gaurav/G2/main/assets/g2-logo.svg" alt="G2" width="400">
 </p>
 
-<p align="left">
-  My personal Claude assistant that runs securely in containers. Inspired by <a href="https://github.com/qwibitai/nanoclaw">NanoClaw</a>, rebuilt as my own.
+<p align="center">
+  Personal AI assistant that runs securely in containers. Inspired by <a href="https://github.com/qwibitai/nanoclaw">NanoClaw</a>, but totally reimagined for Enterpise Grade.
 </p>
 
 <p align="center">
   <a href="https://github.com/v-gaurav/g2/tree/main/repo-tokens"><img src="https://raw.githubusercontent.com/v-gaurav/G2/main/repo-tokens/badge.svg" alt="repo tokens"></a>
-  <!-- token-count --><a href="https://github.com/v-gaurav/g2/tree/main/repo-tokens">49.4k tokens · 25% of context window</a><!-- /token-count -->
+  <!-- token-count --><br><a href="https://github.com/v-gaurav/g2/tree/main/repo-tokens">25% of context window</a><!-- /token-count -->
 </p>
 
 ## Why G2
