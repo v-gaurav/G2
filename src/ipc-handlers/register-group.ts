@@ -1,33 +1,57 @@
-import { canRegisterGroup } from '../authorization.js';
-import { IpcDeps } from '../ipc.js';
+import { AuthorizationPolicy } from '../authorization.js';
 import { logger } from '../logger.js';
-import { IpcCommandHandler } from './types.js';
 
-export class RegisterGroupHandler implements IpcCommandHandler {
-  readonly type = 'register_group';
+import { BaseIpcHandler, HandlerContext, IpcHandlerError } from './base-handler.js';
 
-  async handle(data: Record<string, any>, sourceGroup: string, isMain: boolean, deps: IpcDeps): Promise<void> {
-    if (!canRegisterGroup({ sourceGroup, isMain })) {
-      logger.warn(
-        { sourceGroup },
-        'Unauthorized register_group attempt blocked',
-      );
-      return;
-    }
-    if (data.jid && data.name && data.folder && data.trigger) {
-      deps.registerGroup(data.jid, {
-        name: data.name,
-        folder: data.folder,
-        trigger: data.trigger,
-        added_at: new Date().toISOString(),
-        containerConfig: data.containerConfig,
-        requiresTrigger: data.requiresTrigger,
+interface RegisterGroupPayload {
+  jid: string;
+  name: string;
+  folder: string;
+  trigger: string;
+  containerConfig?: import('../types.js').ContainerConfig;
+  requiresTrigger?: boolean;
+}
+
+export class RegisterGroupHandler extends BaseIpcHandler<RegisterGroupPayload> {
+  readonly command = 'register_group';
+
+  validate(data: Record<string, any>): RegisterGroupPayload {
+    if (!data.jid || !data.name || !data.folder || !data.trigger) {
+      throw new IpcHandlerError('Missing required fields', {
+        command: this.command,
+        hasJid: !!data.jid,
+        hasName: !!data.name,
+        hasFolder: !!data.folder,
+        hasTrigger: !!data.trigger,
       });
-    } else {
-      logger.warn(
-        { data },
-        'Invalid register_group request - missing required fields',
-      );
     }
+    return {
+      jid: data.jid as string,
+      name: data.name as string,
+      folder: data.folder as string,
+      trigger: data.trigger as string,
+      containerConfig: data.containerConfig,
+      requiresTrigger: data.requiresTrigger as boolean | undefined,
+    };
+  }
+
+  async execute(payload: RegisterGroupPayload, context: HandlerContext): Promise<void> {
+    const auth = new AuthorizationPolicy({ sourceGroup: context.sourceGroup, isMain: context.isMain });
+    if (!auth.canRegisterGroup()) {
+      throw new IpcHandlerError('Unauthorized register_group attempt', {
+        sourceGroup: context.sourceGroup,
+      });
+    }
+
+    context.deps.registerGroup(payload.jid, {
+      name: payload.name,
+      folder: payload.folder,
+      trigger: payload.trigger,
+      added_at: new Date().toISOString(),
+      containerConfig: payload.containerConfig,
+      requiresTrigger: payload.requiresTrigger,
+    });
+
+    logger.info({ sourceGroup: context.sourceGroup, jid: payload.jid, folder: payload.folder }, 'Group registered via IPC');
   }
 }

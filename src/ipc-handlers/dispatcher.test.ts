@@ -18,9 +18,9 @@ function makeMockDeps(): IpcDeps {
   };
 }
 
-function makeMockHandler(type: string): IpcCommandHandler & { handle: ReturnType<typeof vi.fn> } {
+function makeMockHandler(command: string): IpcCommandHandler & { handle: ReturnType<typeof vi.fn> } {
   return {
-    type,
+    command,
     handle: vi.fn(async () => {}),
   };
 }

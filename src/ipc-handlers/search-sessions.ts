@@ -1,26 +1,41 @@
 import fs from 'fs';
 import path from 'path';
 
-import { DATA_DIR } from '../config.js';
 import { searchConversationArchives } from '../db.js';
-import { IpcDeps } from '../ipc.js';
+import { GroupPaths } from '../group-paths.js';
 import { logger } from '../logger.js';
-import { IpcCommandHandler } from './types.js';
 
-export class SearchSessionsHandler implements IpcCommandHandler {
-  readonly type = 'search_sessions';
+import { BaseIpcHandler, HandlerContext, IpcHandlerError } from './base-handler.js';
 
-  async handle(data: Record<string, any>, sourceGroup: string, _isMain: boolean, _deps: IpcDeps): Promise<void> {
-    const results = searchConversationArchives(sourceGroup, data.query || '');
+interface SearchSessionsPayload {
+  query: string;
+  requestId: string;
+}
 
-    const responsesDir = path.join(DATA_DIR, 'ipc', sourceGroup, 'responses');
+export class SearchSessionsHandler extends BaseIpcHandler<SearchSessionsPayload> {
+  readonly command = 'search_sessions';
+
+  validate(data: Record<string, any>): SearchSessionsPayload {
+    if (!data.requestId) {
+      throw new IpcHandlerError('Missing requestId', { command: this.command });
+    }
+    return {
+      query: (data.query as string) || '',
+      requestId: data.requestId as string,
+    };
+  }
+
+  async execute(payload: SearchSessionsPayload, context: HandlerContext): Promise<void> {
+    const results = searchConversationArchives(context.sourceGroup, payload.query);
+
+    const responsesDir = GroupPaths.ipcResponsesDir(context.sourceGroup);
     fs.mkdirSync(responsesDir, { recursive: true });
 
-    const responsePath = path.join(responsesDir, `${data.requestId}.json`);
+    const responsePath = path.join(responsesDir, `${payload.requestId}.json`);
     const tmpPath = responsePath + '.tmp';
     fs.writeFileSync(tmpPath, JSON.stringify(results));
     fs.renameSync(tmpPath, responsePath);
 
-    logger.info({ sourceGroup, query: data.query, resultCount: results.length }, 'Search sessions completed');
+    logger.info({ sourceGroup: context.sourceGroup, query: payload.query, resultCount: results.length }, 'Search sessions completed');
   }
 }

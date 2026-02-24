@@ -1,7 +1,6 @@
 import fs from 'fs';
-import path from 'path';
 
-import { DATA_DIR } from '../config.js';
+import { GroupPaths } from '../group-paths.js';
 import { logger } from '../logger.js';
 
 export interface ParsedMessage {
@@ -75,10 +74,7 @@ export function readAndFormatTranscript(
   sessionId: string,
   name: string,
 ): string | null {
-  const transcriptPath = path.join(
-    DATA_DIR, 'sessions', groupFolder, '.claude',
-    'projects', '-workspace-group', `${sessionId}.jsonl`,
-  );
+  const transcriptPath = GroupPaths.sessionTranscript(groupFolder, sessionId);
 
   if (!fs.existsSync(transcriptPath)) {
     logger.debug({ groupFolder, sessionId, transcriptPath }, 'No transcript found for conversation archive');

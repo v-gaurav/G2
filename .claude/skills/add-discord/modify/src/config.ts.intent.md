@@ -11,11 +11,13 @@ Added two new configuration exports for Discord channel support.
 ## Invariants
 - All existing config exports remain unchanged
 - New Discord keys are added to the `readEnvFile` call alongside existing keys
-- New exports are appended at the end of the file
+- New exports are appended at the end of the file (after `TimeoutConfig` class)
 - No existing behavior is modified — Discord config is additive only
 - Both `process.env` and `envConfig` are checked (same pattern as `ASSISTANT_NAME`)
 
 ## Must-keep
-- All existing exports (`ASSISTANT_NAME`, `POLL_INTERVAL`, `TRIGGER_PATTERN`, etc.)
+- All existing exports (`ASSISTANT_NAME`, `POLL_INTERVAL`, `TRIGGER_PATTERN`, `TIMEZONE`, `TimeoutConfig`, etc.)
 - The `readEnvFile` pattern — ALL config read from `.env` must go through this function
 - The `escapeRegex` helper and `TRIGGER_PATTERN` construction
+- The `resolveTimezone()` function and `TIMEZONE` export (uses validated IANA timezone with UTC fallback)
+- The `TimeoutConfig` class with `getHardTimeout()` and `forGroup()` methods

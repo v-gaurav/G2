@@ -1,18 +1,27 @@
 import { insertConversationArchive } from '../db.js';
-import { IpcDeps } from '../ipc.js';
 import { logger } from '../logger.js';
+
 import { readAndFormatTranscript } from './archive-utils.js';
-import { IpcCommandHandler } from './types.js';
+import { BaseIpcHandler, HandlerContext } from './base-handler.js';
 
-export class ClearSessionHandler implements IpcCommandHandler {
-  readonly type = 'clear_session';
+interface ClearSessionPayload {
+  name?: string;
+}
 
-  async handle(data: Record<string, any>, sourceGroup: string, _isMain: boolean, deps: IpcDeps): Promise<void> {
+export class ClearSessionHandler extends BaseIpcHandler<ClearSessionPayload> {
+  readonly command = 'clear_session';
+
+  validate(data: Record<string, any>): ClearSessionPayload {
+    return { name: data.name as string | undefined };
+  }
+
+  async execute(payload: ClearSessionPayload, context: HandlerContext): Promise<void> {
+    const { sourceGroup, deps } = context;
     const sessionId = deps.sessionManager.get(sourceGroup);
 
-    if (sessionId && data.name) {
-      const content = readAndFormatTranscript(sourceGroup, sessionId, data.name);
-      insertConversationArchive(sourceGroup, sessionId, data.name, content || '', new Date().toISOString());
+    if (sessionId && payload.name) {
+      const content = readAndFormatTranscript(sourceGroup, sessionId, payload.name);
+      insertConversationArchive(sourceGroup, sessionId, payload.name, content || '', new Date().toISOString());
     }
 
     deps.sessionManager.delete(sourceGroup);

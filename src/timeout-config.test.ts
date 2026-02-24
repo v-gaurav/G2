@@ -1,11 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
 
-vi.mock('./config.js', () => ({
-  CONTAINER_TIMEOUT: 1800000,
-  IDLE_TIMEOUT: 1800000,
+vi.mock('./env.js', () => ({
+  readEnvFile: () => ({}),
 }));
 
-import { TimeoutConfig } from './timeout-config.js';
+import { TimeoutConfig } from './config.js';
 import type { RegisteredGroup } from './types.js';
 
 const baseGroup: RegisteredGroup = {

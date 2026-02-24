@@ -1,103 +1,107 @@
 import { CronExpressionParser } from 'cron-parser';
 
-import { canScheduleTask } from '../authorization.js';
+import { AuthorizationPolicy } from '../authorization.js';
 import { TIMEZONE } from '../config.js';
 import { createTask } from '../db.js';
-import { IpcDeps } from '../ipc.js';
 import { logger } from '../logger.js';
-import { IpcCommandHandler } from './types.js';
 
-export class ScheduleTaskHandler implements IpcCommandHandler {
-  readonly type = 'schedule_task';
+import { BaseIpcHandler, HandlerContext, IpcHandlerError } from './base-handler.js';
 
-  async handle(data: Record<string, any>, sourceGroup: string, isMain: boolean, deps: IpcDeps): Promise<void> {
-    if (
-      data.prompt &&
-      data.schedule_type &&
-      data.schedule_value &&
-      data.targetJid
-    ) {
-      const registeredGroups = deps.registeredGroups();
-      const targetJid = data.targetJid as string;
-      const targetGroupEntry = registeredGroups[targetJid];
+interface ScheduleTaskPayload {
+  prompt: string;
+  schedule_type: 'cron' | 'interval' | 'once';
+  schedule_value: string;
+  targetJid: string;
+  context_mode: 'group' | 'isolated';
+}
 
-      if (!targetGroupEntry) {
-        logger.warn(
-          { targetJid },
-          'Cannot schedule task: target group not registered',
-        );
-        return;
-      }
+export class ScheduleTaskHandler extends BaseIpcHandler<ScheduleTaskPayload> {
+  readonly command = 'schedule_task';
 
-      const targetFolder = targetGroupEntry.folder;
-
-      if (!canScheduleTask({ sourceGroup, isMain }, targetFolder)) {
-        logger.warn(
-          { sourceGroup, targetFolder },
-          'Unauthorized schedule_task attempt blocked',
-        );
-        return;
-      }
-
-      const scheduleType = data.schedule_type as 'cron' | 'interval' | 'once';
-
-      let nextRun: string | null = null;
-      if (scheduleType === 'cron') {
-        try {
-          const interval = CronExpressionParser.parse(data.schedule_value, {
-            tz: TIMEZONE,
-          });
-          nextRun = interval.next().toISOString();
-        } catch {
-          logger.warn(
-            { scheduleValue: data.schedule_value },
-            'Invalid cron expression',
-          );
-          return;
-        }
-      } else if (scheduleType === 'interval') {
-        const ms = parseInt(data.schedule_value, 10);
-        if (isNaN(ms) || ms <= 0) {
-          logger.warn(
-            { scheduleValue: data.schedule_value },
-            'Invalid interval',
-          );
-          return;
-        }
-        nextRun = new Date(Date.now() + ms).toISOString();
-      } else if (scheduleType === 'once') {
-        const scheduled = new Date(data.schedule_value);
-        if (isNaN(scheduled.getTime())) {
-          logger.warn(
-            { scheduleValue: data.schedule_value },
-            'Invalid timestamp',
-          );
-          return;
-        }
-        nextRun = scheduled.toISOString();
-      }
-
-      const taskId = `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const contextMode =
+  validate(data: Record<string, any>): ScheduleTaskPayload {
+    if (!data.prompt || !data.schedule_type || !data.schedule_value || !data.targetJid) {
+      throw new IpcHandlerError('Missing required fields', {
+        command: this.command,
+        hasPrompt: !!data.prompt,
+        hasScheduleType: !!data.schedule_type,
+        hasScheduleValue: !!data.schedule_value,
+        hasTargetJid: !!data.targetJid,
+      });
+    }
+    return {
+      prompt: data.prompt as string,
+      schedule_type: data.schedule_type as 'cron' | 'interval' | 'once',
+      schedule_value: data.schedule_value as string,
+      targetJid: data.targetJid as string,
+      context_mode:
         data.context_mode === 'group' || data.context_mode === 'isolated'
           ? data.context_mode
-          : 'isolated';
-      createTask({
-        id: taskId,
-        group_folder: targetFolder,
-        chat_jid: targetJid,
-        prompt: data.prompt,
-        schedule_type: scheduleType,
-        schedule_value: data.schedule_value,
-        context_mode: contextMode,
-        next_run: nextRun,
-        status: 'active',
-        created_at: new Date().toISOString(),
+          : 'isolated',
+    };
+  }
+
+  async execute(payload: ScheduleTaskPayload, context: HandlerContext): Promise<void> {
+    const registeredGroups = context.deps.registeredGroups();
+    const targetGroupEntry = registeredGroups[payload.targetJid];
+
+    if (!targetGroupEntry) {
+      throw new IpcHandlerError('Target group not registered', {
+        targetJid: payload.targetJid,
       });
-      logger.info(
-        { taskId, sourceGroup, targetFolder, contextMode },
-        'Task created via IPC',
-      );
     }
+
+    const targetFolder = targetGroupEntry.folder;
+    const auth = new AuthorizationPolicy({ sourceGroup: context.sourceGroup, isMain: context.isMain });
+
+    if (!auth.canScheduleTask(targetFolder)) {
+      throw new IpcHandlerError('Unauthorized schedule_task attempt', {
+        sourceGroup: context.sourceGroup,
+        targetFolder,
+      });
+    }
+
+    const nextRun = this.computeNextRun(payload.schedule_type, payload.schedule_value);
+
+    const taskId = `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    createTask({
+      id: taskId,
+      group_folder: targetFolder,
+      chat_jid: payload.targetJid,
+      prompt: payload.prompt,
+      schedule_type: payload.schedule_type,
+      schedule_value: payload.schedule_value,
+      context_mode: payload.context_mode,
+      next_run: nextRun,
+      status: 'active',
+      created_at: new Date().toISOString(),
+    });
+    logger.info(
+      { taskId, sourceGroup: context.sourceGroup, targetFolder, contextMode: payload.context_mode },
+      'Task created via IPC',
+    );
+  }
+
+  private computeNextRun(scheduleType: string, scheduleValue: string): string | null {
+    if (scheduleType === 'cron') {
+      try {
+        const interval = CronExpressionParser.parse(scheduleValue, { tz: TIMEZONE });
+        return interval.next().toISOString();
+      } catch {
+        throw new IpcHandlerError('Invalid cron expression', { scheduleValue });
+      }
+    } else if (scheduleType === 'interval') {
+      const ms = parseInt(scheduleValue, 10);
+      if (isNaN(ms) || ms <= 0) {
+        throw new IpcHandlerError('Invalid interval', { scheduleValue });
+      }
+      return new Date(Date.now() + ms).toISOString();
+    } else if (scheduleType === 'once') {
+      const scheduled = new Date(scheduleValue);
+      if (isNaN(scheduled.getTime())) {
+        throw new IpcHandlerError('Invalid timestamp', { scheduleValue });
+      }
+      return scheduled.toISOString();
+    }
+    return null;
   }
 }

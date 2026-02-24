@@ -8,7 +8,7 @@ import {
   MAIN_GROUP_FOLDER,
 } from './config.js';
 import { AvailableGroup } from './container-runner.js';
-import { canSendMessage } from './authorization.js';
+import { AuthorizationPolicy } from './authorization.js';
 import {
   ArchiveSessionHandler,
   CancelTaskHandler,
@@ -159,8 +159,8 @@ async function processDirectory(
       if (data.type === 'message' && data.chatJid && data.text) {
         // Authorization: verify this group can send to this chatJid
         const targetGroup = registeredGroups[data.chatJid];
-        const ctx = { sourceGroup, isMain };
-        if (canSendMessage(ctx, targetGroup?.folder ?? '')) {
+        const auth = new AuthorizationPolicy({ sourceGroup, isMain });
+        if (auth.canSendMessage(targetGroup?.folder ?? '')) {
           await deps.sendMessage(data.chatJid, data.text);
           logger.info(
             { chatJid: data.chatJid, sourceGroup },

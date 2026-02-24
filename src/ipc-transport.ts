@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-import { DATA_DIR } from './config.js';
+import { GroupPaths } from './group-paths.js';
 import { logger } from './logger.js';
 
 /**
@@ -14,7 +14,7 @@ export class IpcTransport {
    * Uses atomic write (tmp + rename) to prevent partial reads.
    */
   sendMessage(groupFolder: string, text: string): boolean {
-    const inputDir = path.join(DATA_DIR, 'ipc', groupFolder, 'input');
+    const inputDir = GroupPaths.ipcInputDir(groupFolder);
     try {
       fs.mkdirSync(inputDir, { recursive: true });
       const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}.json`;
@@ -33,7 +33,7 @@ export class IpcTransport {
    * Write a close sentinel file to signal the container to wind down.
    */
   closeStdin(groupFolder: string): void {
-    const inputDir = path.join(DATA_DIR, 'ipc', groupFolder, 'input');
+    const inputDir = GroupPaths.ipcInputDir(groupFolder);
     try {
       fs.mkdirSync(inputDir, { recursive: true });
       fs.writeFileSync(path.join(inputDir, '_close'), '');

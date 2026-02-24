@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 
 import {
   AuthContext,
+  AuthorizationPolicy,
   canSendMessage,
   canScheduleTask,
   canManageTask,
@@ -15,6 +16,38 @@ const otherCtx: AuthContext = { sourceGroup: 'other-group', isMain: false };
 const thirdCtx: AuthContext = { sourceGroup: 'third-group', isMain: false };
 
 describe('AuthorizationPolicy', () => {
+  describe('class API', () => {
+    it('main policy can do everything', () => {
+      const policy = new AuthorizationPolicy(mainCtx);
+      expect(policy.canSendMessage('other-group')).toBe(true);
+      expect(policy.canScheduleTask('other-group')).toBe(true);
+      expect(policy.canManageTask('other-group')).toBe(true);
+      expect(policy.canRegisterGroup()).toBe(true);
+      expect(policy.canRefreshGroups()).toBe(true);
+      expect(policy.canManageSession('other-group')).toBe(true);
+    });
+
+    it('non-main policy is scoped to own group', () => {
+      const policy = new AuthorizationPolicy(otherCtx);
+      expect(policy.canSendMessage('other-group')).toBe(true);
+      expect(policy.canSendMessage('main')).toBe(false);
+      expect(policy.canScheduleTask('other-group')).toBe(true);
+      expect(policy.canScheduleTask('main')).toBe(false);
+      expect(policy.canManageTask('other-group')).toBe(true);
+      expect(policy.canManageTask('main')).toBe(false);
+      expect(policy.canRegisterGroup()).toBe(false);
+      expect(policy.canRefreshGroups()).toBe(false);
+      expect(policy.canManageSession('other-group')).toBe(true);
+      expect(policy.canManageSession('main')).toBe(false);
+    });
+
+    it('exposes sourceGroup and isMain', () => {
+      const policy = new AuthorizationPolicy(otherCtx);
+      expect(policy.sourceGroup).toBe('other-group');
+      expect(policy.isMain).toBe(false);
+    });
+  });
+
   describe('canSendMessage', () => {
     it('main group can send to any group', () => {
       expect(canSendMessage(mainCtx, 'other-group')).toBe(true);

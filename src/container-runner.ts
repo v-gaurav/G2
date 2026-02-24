@@ -9,12 +9,11 @@ import path from 'path';
 import {
   CONTAINER_IMAGE,
   CONTAINER_MAX_OUTPUT_SIZE,
-  DATA_DIR,
-  GROUPS_DIR,
   TIMEZONE,
+  TimeoutConfig,
 } from './config.js';
-import { TimeoutConfig } from './timeout-config.js';
 import { readEnvFile } from './env.js';
+import { GroupPaths } from './group-paths.js';
 import { logger } from './logger.js';
 import type { IContainerRuntime } from './interfaces/container-runtime.js';
 import type { IMountFactory, VolumeMount } from './interfaces/mount-factory.js';
@@ -113,7 +112,7 @@ export async function runContainerAgent(
   const mountFactory = deps?.mountFactory ?? defaultMountFactory;
   const startTime = Date.now();
 
-  const groupDir = path.join(GROUPS_DIR, group.folder);
+  const groupDir = GroupPaths.groupDir(group.folder);
   fs.mkdirSync(groupDir, { recursive: true });
 
   const mounts = mountFactory.buildMounts(group, input.isMain);
@@ -144,7 +143,7 @@ export async function runContainerAgent(
     'Spawning container agent',
   );
 
-  const logsDir = path.join(GROUPS_DIR, group.folder, 'logs');
+  const logsDir = GroupPaths.logsDir(group.folder);
   fs.mkdirSync(logsDir, { recursive: true });
 
   return new Promise((resolve) => {
@@ -489,7 +488,7 @@ export function writeTasksSnapshot(
   }>,
 ): void {
   // Write filtered tasks to the group's IPC directory
-  const groupIpcDir = path.join(DATA_DIR, 'ipc', groupFolder);
+  const groupIpcDir = GroupPaths.ipcDir(groupFolder);
   fs.mkdirSync(groupIpcDir, { recursive: true });
 
   // Main sees all tasks, others only see their own
@@ -505,7 +504,7 @@ export function writeSessionHistorySnapshot(
   groupFolder: string,
   sessions: Array<{ id: number; name: string; session_id: string; archived_at: string }>,
 ): void {
-  const groupIpcDir = path.join(DATA_DIR, 'ipc', groupFolder);
+  const groupIpcDir = GroupPaths.ipcDir(groupFolder);
   fs.mkdirSync(groupIpcDir, { recursive: true });
   fs.writeFileSync(
     path.join(groupIpcDir, 'session_history.json'),
@@ -531,7 +530,7 @@ export function writeGroupsSnapshot(
   groups: AvailableGroup[],
   registeredJids: Set<string>,
 ): void {
-  const groupIpcDir = path.join(DATA_DIR, 'ipc', groupFolder);
+  const groupIpcDir = GroupPaths.ipcDir(groupFolder);
   fs.mkdirSync(groupIpcDir, { recursive: true });
 
   // Main sees all groups; others see nothing (they can't activate groups)

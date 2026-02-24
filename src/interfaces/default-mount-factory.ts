@@ -6,7 +6,8 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import { DATA_DIR, GROUPS_DIR } from '../config.js';
+import { GROUPS_DIR } from '../config.js';
+import { GroupPaths } from '../group-paths.js';
 import { validateAdditionalMounts } from '../mount-security.js';
 import type { RegisteredGroup } from '../types.js';
 import type { IContainerRuntime } from './container-runtime.js';
@@ -39,14 +40,14 @@ export class DefaultMountFactory implements IMountFactory {
 
       // Main also gets its group folder as the working directory
       mounts.push({
-        hostPath: path.join(GROUPS_DIR, group.folder),
+        hostPath: GroupPaths.groupDir(group.folder),
         containerPath: '/workspace/group',
         readonly: false,
       });
     } else {
       // Other groups only get their own folder
       mounts.push({
-        hostPath: path.join(GROUPS_DIR, group.folder),
+        hostPath: GroupPaths.groupDir(group.folder),
         containerPath: '/workspace/group',
         readonly: false,
       });
@@ -63,12 +64,7 @@ export class DefaultMountFactory implements IMountFactory {
     }
 
     // Per-group Claude sessions directory (isolated from other groups)
-    const groupSessionsDir = path.join(
-      DATA_DIR,
-      'sessions',
-      group.folder,
-      '.claude',
-    );
+    const groupSessionsDir = GroupPaths.sessionsDir(group.folder);
     fs.mkdirSync(groupSessionsDir, { recursive: true });
     const settingsFile = path.join(groupSessionsDir, 'settings.json');
     if (!fs.existsSync(settingsFile)) {
@@ -104,11 +100,11 @@ export class DefaultMountFactory implements IMountFactory {
     });
 
     // Per-group IPC namespace
-    const groupIpcDir = path.join(DATA_DIR, 'ipc', group.folder);
-    fs.mkdirSync(path.join(groupIpcDir, 'messages'), { recursive: true });
-    fs.mkdirSync(path.join(groupIpcDir, 'tasks'), { recursive: true });
-    fs.mkdirSync(path.join(groupIpcDir, 'input'), { recursive: true });
-    fs.mkdirSync(path.join(groupIpcDir, 'responses'), { recursive: true });
+    const groupIpcDir = GroupPaths.ipcDir(group.folder);
+    fs.mkdirSync(GroupPaths.ipcMessagesDir(group.folder), { recursive: true });
+    fs.mkdirSync(GroupPaths.ipcTasksDir(group.folder), { recursive: true });
+    fs.mkdirSync(GroupPaths.ipcInputDir(group.folder), { recursive: true });
+    fs.mkdirSync(GroupPaths.ipcResponsesDir(group.folder), { recursive: true });
     mounts.push({
       hostPath: groupIpcDir,
       containerPath: '/workspace/ipc',

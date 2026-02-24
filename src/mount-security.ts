@@ -25,7 +25,7 @@ let allowlistLoadError: string | null = null;
 /**
  * Default blocked patterns - paths that should never be mounted
  */
-const DEFAULT_BLOCKED_PATTERNS = [
+const DEFAULT_BLOCKED_PATTERNS = new Set([
   '.ssh',
   '.gnupg',
   '.gpg',
@@ -43,7 +43,7 @@ const DEFAULT_BLOCKED_PATTERNS = [
   'id_ed25519',
   'private_key',
   '.secret',
-];
+]);
 
 /**
  * Load the mount allowlist from the external config location.
@@ -88,10 +88,8 @@ export function loadMountAllowlist(): MountAllowlist | null {
     }
 
     // Merge with default blocked patterns
-    const mergedBlockedPatterns = [
-      ...new Set([...DEFAULT_BLOCKED_PATTERNS, ...allowlist.blockedPatterns]),
-    ];
-    allowlist.blockedPatterns = mergedBlockedPatterns;
+    const mergedSet = new Set([...DEFAULT_BLOCKED_PATTERNS, ...allowlist.blockedPatterns]);
+    allowlist.blockedPatterns = [...mergedSet];
 
     cachedAllowlist = allowlist;
     logger.info(
@@ -144,23 +142,31 @@ function getRealPath(p: string): string | null {
 }
 
 /**
- * Check if a path matches any blocked pattern
+ * Check if a path matches any blocked pattern.
+ * Uses a Set for O(1) exact-match lookups on path components,
+ * then falls back to substring matching for partial hits.
  */
 function matchesBlockedPattern(
   realPath: string,
   blockedPatterns: string[],
 ): string | null {
+  const patternSet = new Set(blockedPatterns);
   const pathParts = realPath.split(path.sep);
 
+  // Fast path: exact match on any path component
+  for (const part of pathParts) {
+    if (patternSet.has(part)) {
+      return part;
+    }
+  }
+
+  // Slow path: substring match (e.g. "private_key" inside "my_private_key.pem")
   for (const pattern of blockedPatterns) {
-    // Check if any path component matches the pattern
     for (const part of pathParts) {
-      if (part === pattern || part.includes(pattern)) {
+      if (part.includes(pattern)) {
         return pattern;
       }
     }
-
-    // Also check if the full path contains the pattern
     if (realPath.includes(pattern)) {
       return pattern;
     }

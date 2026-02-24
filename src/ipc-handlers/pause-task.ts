@@ -1,27 +1,29 @@
-import { canManageTask } from '../authorization.js';
-import { getTaskById, updateTask } from '../db.js';
-import { IpcDeps } from '../ipc.js';
+import { updateTask } from '../db.js';
 import { logger } from '../logger.js';
-import { IpcCommandHandler } from './types.js';
 
-export class PauseTaskHandler implements IpcCommandHandler {
-  readonly type = 'pause_task';
+import { BaseIpcHandler, HandlerContext, IpcHandlerError } from './base-handler.js';
+import { getAuthorizedTask } from './task-helpers.js';
 
-  async handle(data: Record<string, any>, sourceGroup: string, isMain: boolean, _deps: IpcDeps): Promise<void> {
-    if (data.taskId) {
-      const task = getTaskById(data.taskId);
-      if (task && canManageTask({ sourceGroup, isMain }, task.group_folder)) {
-        updateTask(data.taskId, { status: 'paused' });
-        logger.info(
-          { taskId: data.taskId, sourceGroup },
-          'Task paused via IPC',
-        );
-      } else {
-        logger.warn(
-          { taskId: data.taskId, sourceGroup },
-          'Unauthorized task pause attempt',
-        );
-      }
+interface PauseTaskPayload {
+  taskId: string;
+}
+
+export class PauseTaskHandler extends BaseIpcHandler<PauseTaskPayload> {
+  readonly command = 'pause_task';
+
+  validate(data: Record<string, any>): PauseTaskPayload {
+    if (!data.taskId) {
+      throw new IpcHandlerError('Missing taskId', { command: this.command });
     }
+    return { taskId: data.taskId as string };
+  }
+
+  async execute(payload: PauseTaskPayload, context: HandlerContext): Promise<void> {
+    getAuthorizedTask(payload.taskId, context.sourceGroup, context.isMain);
+    updateTask(payload.taskId, { status: 'paused' });
+    logger.info(
+      { taskId: payload.taskId, sourceGroup: context.sourceGroup },
+      'Task paused via IPC',
+    );
   }
 }

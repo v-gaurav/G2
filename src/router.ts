@@ -1,28 +1,31 @@
-import { NewMessage } from './types.js';
+/**
+ * Backward-compatible re-exports.
+ *
+ * The actual logic now lives in:
+ *   - MessageFormatter  (src/message-formatter.ts) — format transforms
+ *   - MessageRouter     (src/message-router.ts)    — routing decisions
+ *
+ * Existing callers that import { formatMessages } from './router.js' continue to work.
+ */
+
+export { MessageFormatter } from './message-formatter.js';
+export { MessageRouter } from './message-router.js';
+
+import { MessageFormatter } from './message-formatter.js';
+import type { NewMessage } from './types.js';
 
 export function escapeXml(s: string): string {
-  if (!s) return '';
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+  return MessageFormatter.escapeXml(s);
 }
 
 export function formatMessages(messages: NewMessage[]): string {
-  const lines = messages.map((m) =>
-    `<message sender="${escapeXml(m.sender_name)}" time="${m.timestamp}">${escapeXml(m.content)}</message>`,
-  );
-  return `<messages>\n${lines.join('\n')}\n</messages>`;
+  return MessageFormatter.formatMessages(messages);
 }
 
 export function stripInternalTags(text: string): string {
-  return text.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
+  return MessageFormatter.stripInternalTags(text);
 }
 
 export function formatOutbound(rawText: string): string {
-  const text = stripInternalTags(rawText);
-  if (!text) return '';
-  return text;
+  return MessageFormatter.formatOutbound(rawText);
 }
-

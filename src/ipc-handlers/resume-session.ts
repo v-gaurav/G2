@@ -3,32 +3,46 @@ import {
   getConversationArchiveById,
   insertConversationArchive,
 } from '../db.js';
-import { IpcDeps } from '../ipc.js';
 import { logger } from '../logger.js';
+
 import { readAndFormatTranscript } from './archive-utils.js';
-import { IpcCommandHandler } from './types.js';
+import { BaseIpcHandler, HandlerContext, IpcHandlerError } from './base-handler.js';
 
-export class ResumeSessionHandler implements IpcCommandHandler {
-  readonly type = 'resume_session';
+interface ResumeSessionPayload {
+  sessionHistoryId: string;
+  saveName?: string;
+}
 
-  async handle(data: Record<string, any>, sourceGroup: string, _isMain: boolean, deps: IpcDeps): Promise<void> {
+export class ResumeSessionHandler extends BaseIpcHandler<ResumeSessionPayload> {
+  readonly command = 'resume_session';
+
+  validate(data: Record<string, any>): ResumeSessionPayload {
     if (!data.sessionHistoryId) {
-      logger.warn({ sourceGroup }, 'resume_session missing sessionHistoryId');
-      return;
+      throw new IpcHandlerError('Missing sessionHistoryId', { command: this.command });
     }
+    return {
+      sessionHistoryId: data.sessionHistoryId as string,
+      saveName: data.saveName as string | undefined,
+    };
+  }
 
-    const target = getConversationArchiveById(data.sessionHistoryId);
+  async execute(payload: ResumeSessionPayload, context: HandlerContext): Promise<void> {
+    const { sourceGroup, deps } = context;
+
+    const target = getConversationArchiveById(Number(payload.sessionHistoryId));
     if (!target) {
-      logger.warn({ sourceGroup, id: data.sessionHistoryId }, 'Conversation archive entry not found');
-      return;
+      throw new IpcHandlerError('Conversation archive entry not found', {
+        sourceGroup,
+        id: payload.sessionHistoryId,
+      });
     }
 
     // Archive current session if save name provided
-    if (data.saveName) {
+    if (payload.saveName) {
       const currentSessionId = deps.sessionManager.get(sourceGroup);
       if (currentSessionId) {
-        const content = readAndFormatTranscript(sourceGroup, currentSessionId, data.saveName);
-        insertConversationArchive(sourceGroup, currentSessionId, data.saveName, content || '', new Date().toISOString());
+        const content = readAndFormatTranscript(sourceGroup, currentSessionId, payload.saveName);
+        insertConversationArchive(sourceGroup, currentSessionId, payload.saveName, content || '', new Date().toISOString());
       }
     }
 
@@ -46,6 +60,6 @@ export class ResumeSessionHandler implements IpcCommandHandler {
       }
     }
 
-    logger.info({ sourceGroup, restoredSessionId: target.session_id, name: data.saveName }, 'Session resumed via IPC');
+    logger.info({ sourceGroup, restoredSessionId: target.session_id, name: payload.saveName }, 'Session resumed via IPC');
   }
 }

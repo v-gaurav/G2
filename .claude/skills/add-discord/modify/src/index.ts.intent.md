@@ -1,43 +1,29 @@
 # Intent: src/index.ts modifications
 
 ## What changed
-Added Discord as a channel option alongside WhatsApp, introducing multi-channel infrastructure.
+Added Discord as a channel option alongside WhatsApp, using the `Orchestrator` + `addChannel()` pattern.
 
 ## Key sections
 
 ### Imports (top of file)
 - Added: `DiscordChannel` from `./channels/discord.js`
 - Added: `DISCORD_BOT_TOKEN`, `DISCORD_ONLY` from `./config.js`
-- Added: `findChannel` from `./router.js`
-- Added: `Channel` from `./types.js`
-
-### Multi-channel infrastructure
-- Added: `const channels: Channel[] = []` array to hold all active channels
-- Changed: `processGroupMessages` uses `findChannel(channels, chatJid)` instead of `whatsapp` directly
-- Changed: `startMessageLoop` uses `findChannel(channels, chatJid)` instead of `whatsapp` directly
-- Changed: `channel.setTyping?.()` instead of `whatsapp.setTyping()`
-- Changed: `channel.sendMessage()` instead of `whatsapp.sendMessage()`
-
-### getAvailableGroups()
-- Unchanged: uses `c.is_group` filter from base (Discord channels pass `isGroup=true` via `onChatMetadata`)
+- Kept: All current imports (`WhatsAppChannel`, `Orchestrator`, `storeChatMetadata`, `storeMessage`, `logger`, `NewMessage`)
 
 ### main()
-- Added: `channelOpts` shared callback object for all channels
-- Changed: WhatsApp conditional to `if (!DISCORD_ONLY)`
-- Added: conditional Discord creation (`if (DISCORD_BOT_TOKEN)`)
-- Changed: shutdown iterates `channels` array instead of just `whatsapp`
-- Changed: subsystems use `findChannel(channels, jid)` for message routing
+- Changed: WhatsApp creation wrapped in `if (!DISCORD_ONLY)` conditional
+- Added: conditional Discord creation (`if (DISCORD_BOT_TOKEN)`) with `orchestrator.addChannel(discord)`
+- Unchanged: `channelOpts` shared callback object
+- Unchanged: `await orchestrator.start()` at the end
 
 ## Invariants
-- All existing message processing logic (triggers, cursors, idle timers) is preserved
-- The `runAgent` function is completely unchanged
-- State management (loadState/saveState) is unchanged
-- Recovery logic is unchanged
-- Container runtime check is unchanged (ensureContainerSystemRunning)
+- The `Orchestrator` class (in `orchestrator.ts`) is completely unchanged — it's channel-agnostic
+- All orchestrator internals (ChannelRegistry, SessionManager, message processing, idle timers, trigger validation) are untouched
+- The `getAvailableGroups` and `_setRegisteredGroups` exports are unchanged
+- The `isDirectRun` guard at bottom is unchanged
 
 ## Must-keep
-- The `escapeXml` and `formatMessages` re-exports
-- The `_setRegisteredGroups` test helper
+- The `Orchestrator` re-export
+- The `getAvailableGroups` and `_setRegisteredGroups` exports
 - The `isDirectRun` guard at bottom
-- All error handling and cursor rollback logic in processGroupMessages
-- The outgoing queue flush and reconnection logic (in WhatsAppChannel, not here)
+- The `channelOpts` pattern with `registeredGroups: () => orchestrator.getRegisteredGroups()`
