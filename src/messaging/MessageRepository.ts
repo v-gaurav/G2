@@ -17,7 +17,7 @@ export class MessageRepository {
 
   storeMessage(msg: NewMessage): void {
     this.db.prepare(
-      `INSERT OR REPLACE INTO messages (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT OR REPLACE INTO messages (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message, media_type, media_mimetype, media_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       msg.id,
       msg.chat_jid,
@@ -27,6 +27,9 @@ export class MessageRepository {
       msg.timestamp,
       msg.is_from_me ? 1 : 0,
       msg.is_bot_message ? 1 : 0,
+      msg.media_type ?? null,
+      msg.media_mimetype ?? null,
+      msg.media_path ?? null,
     );
   }
 
@@ -39,9 +42,12 @@ export class MessageRepository {
     timestamp: string;
     is_from_me: boolean;
     is_bot_message?: boolean;
+    media_type?: string;
+    media_mimetype?: string;
+    media_path?: string;
   }): void {
     this.db.prepare(
-      `INSERT OR REPLACE INTO messages (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT OR REPLACE INTO messages (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message, media_type, media_mimetype, media_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       msg.id,
       msg.chat_jid,
@@ -51,6 +57,9 @@ export class MessageRepository {
       msg.timestamp,
       msg.is_from_me ? 1 : 0,
       msg.is_bot_message ? 1 : 0,
+      msg.media_type ?? null,
+      msg.media_mimetype ?? null,
+      msg.media_path ?? null,
     );
   }
 
@@ -63,7 +72,7 @@ export class MessageRepository {
 
     const placeholders = jids.map(() => '?').join(',');
     const sql = `
-      SELECT id, chat_jid, sender, sender_name, content, timestamp
+      SELECT id, chat_jid, sender, sender_name, content, timestamp, media_type, media_mimetype, media_path
       FROM messages
       WHERE timestamp > ? AND chat_jid IN (${placeholders})
         AND is_bot_message = 0 AND content NOT LIKE ?
@@ -88,7 +97,7 @@ export class MessageRepository {
     botPrefix: string,
   ): NewMessage[] {
     const sql = `
-      SELECT id, chat_jid, sender, sender_name, content, timestamp
+      SELECT id, chat_jid, sender, sender_name, content, timestamp, media_type, media_mimetype, media_path
       FROM messages
       WHERE chat_jid = ? AND timestamp > ?
         AND is_bot_message = 0 AND content NOT LIKE ?

@@ -38,6 +38,63 @@ When working as a sub-agent or teammate, only use `send_message` if instructed t
 
 Files you create are saved in `/workspace/group/`. Use this for notes, research, or anything that should persist.
 
+### Standard Folders
+
+| Folder | What goes here |
+|--------|---------------|
+| `Media/` | Photos, screenshots, images, voice notes sent via chat (auto-saved by G2) |
+| `Documents/` | PDFs, tax forms, contracts, invoices, reports, spreadsheets |
+| `Downloads/` | Files fetched from URLs, browser downloads, temporary downloads |
+| `Notes/` | Research notes, summaries, meeting notes, drafts |
+
+Create these folders as needed — they don't all have to exist upfront.
+
+### Smart File Lookup
+
+When the user references a file or topic, proactively search the right places before asking where it is:
+
+- *Tax documents, invoices, contracts, forms, reports* → search `Documents/` first, then `Downloads/`, then root
+- *Screenshots, photos, pictures, images* → search `Media/` first. Incoming chat media is auto-saved here as `{type}-{timestamp}-{random}.{ext}` (e.g. `image-1706745600-a3f.jpg`)
+- *Voice messages, audio* → search `Media/` for `.ogg`, `.mp3`, `.m4a` files
+- *Downloaded files, web content* → search `Downloads/` first, then `Documents/`
+- *Notes, research, summaries* → search `Notes/` first, then root
+- *Anything else* → search root `/workspace/group/`, then all subfolders
+
+Use `find` or `ls -R` to locate files. If a file isn't where expected, widen the search before telling the user you can't find it.
+
+When the user says "that document" or "the file I sent", check the most recent messages for `media_path` attributes — that tells you exactly where the file was saved.
+
+### Smart File Storage
+
+When saving files, use the right folder automatically:
+
+- User sends a tax PDF or says "save this invoice" → save to `Documents/`
+- You download something from a URL → save to `Downloads/`
+- You write a summary or research notes → save to `Notes/`
+- User asks to "save this" without specifics → infer from content type and pick the right folder
+
+Use descriptive filenames: `2026-tax-return.pdf` not `file1.pdf`, `meeting-notes-2026-02-24.md` not `notes.md`.
+
+### Proactive File Management
+
+You have full agency to:
+- Search across all folders to find what the user needs
+- Move files to the correct folder if they're misplaced (e.g. a PDF in `Downloads/` that belongs in `Documents/`)
+- Create subfolders for organization (e.g. `Documents/taxes/2026/`)
+- List and summarize folder contents when the user asks "what do I have" or "show my files"
+- Read and summarize file contents without being asked, if it helps answer the user's question
+
+### Destructive Actions — Ask First
+
+Never do the following without explicit user confirmation:
+- Delete files or folders
+- Overwrite existing files with different content
+- Move files out of the workspace
+- Rename files that the user may reference by their current name
+- Clear or truncate files
+
+If the user says "clean up my files" or "delete old stuff", list what you plan to remove and get a yes before proceeding.
+
 ## Memory
 
 Past conversations are searchable via the `search_sessions` tool. Use this to recall context from previous sessions.

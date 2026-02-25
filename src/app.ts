@@ -218,6 +218,12 @@ export class Orchestrator {
         if (!channel) throw new Error(`No channel for JID: ${jid}`);
         return channel.sendMessage(jid, text);
       },
+      sendMedia: async (jid, filePath, mediaType, caption, mimetype) => {
+        const channel = this.channelRegistry.findConnectedByJid(jid);
+        if (!channel) throw new Error(`No channel for JID: ${jid}`);
+        if (!channel.sendMedia) throw new Error(`Channel ${channel.name} does not support media`);
+        return channel.sendMedia(jid, filePath, mediaType, caption, mimetype);
+      },
       registeredGroups: () => this.registeredGroups,
       registerGroup: (jid, group) => this.registerGroup(jid, group),
       syncGroupMetadata: (force) => this.channelRegistry.syncAllMetadata(force),

@@ -150,6 +150,15 @@ export function createSchema(db: BetterSqlite3.Database): void {
   } catch {
     /* column already exists */
   }
+
+  // Add media columns to messages if they don't exist
+  try {
+    db.exec(`ALTER TABLE messages ADD COLUMN media_type TEXT`);
+    db.exec(`ALTER TABLE messages ADD COLUMN media_mimetype TEXT`);
+    db.exec(`ALTER TABLE messages ADD COLUMN media_path TEXT`);
+  } catch {
+    /* columns already exist */
+  }
 }
 
 /**

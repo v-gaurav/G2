@@ -63,6 +63,41 @@ server.tool(
 );
 
 server.tool(
+  'send_media',
+  'Send a media file (image, video, audio, or document) to the user or group. The file must exist within /workspace/group/. Use this for sending images, PDFs, audio clips, or any file the user requests.',
+  {
+    filePath: z.string().describe('Path to the file relative to /workspace/group/ (e.g., "Media/image-123.jpg" or "output/report.pdf")'),
+    mediaType: z.enum(['image', 'video', 'audio', 'document']).describe('Type of media to send'),
+    caption: z.string().optional().describe('Optional caption/message to accompany the media'),
+    mimetype: z.string().optional().describe('MIME type of the file (e.g., "image/jpeg", "application/pdf"). Auto-detected if omitted for common types.'),
+  },
+  async (args) => {
+    const fullPath = path.join('/workspace/group', args.filePath);
+    if (!fs.existsSync(fullPath)) {
+      return {
+        content: [{ type: 'text' as const, text: `File not found: ${args.filePath}. The file must exist within /workspace/group/.` }],
+        isError: true,
+      };
+    }
+
+    const data: Record<string, string | undefined> = {
+      type: 'media',
+      chatJid,
+      filePath: args.filePath,
+      mediaType: args.mediaType,
+      caption: args.caption || undefined,
+      mimetype: args.mimetype || undefined,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    };
+
+    writeIpcFile(MESSAGES_DIR, data);
+
+    return { content: [{ type: 'text' as const, text: `Media sent: ${args.filePath} (${args.mediaType})` }] };
+  },
+);
+
+server.tool(
   'schedule_task',
   `Schedule a recurring or one-time task. The task will run as a full agent with access to all tools.
 

@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
@@ -5,11 +6,14 @@ import makeWASocket, {
   Browsers,
   DisconnectReason,
   WASocket,
+  downloadMediaMessage,
   makeCacheableSignalKeyStore,
   useMultiFileAuthState,
+  type AnyMessageContent,
+  type WAMessage,
 } from '@whiskeysockets/baileys';
 
-import { ASSISTANT_HAS_OWN_NUMBER, ASSISTANT_NAME, STORE_DIR } from '../../infrastructure/Config.js';
+import { ASSISTANT_HAS_OWN_NUMBER, ASSISTANT_NAME, GROUPS_DIR, STORE_DIR } from '../../infrastructure/Config.js';
 import { database as defaultDatabase } from '../../infrastructure/Database.js';
 import { logger } from '../../infrastructure/Logger.js';
 import type { ChatRepository } from '../MessageRepository.js';
@@ -18,6 +22,45 @@ import { OutgoingMessageQueue } from './OutgoingMessageQueue.js';
 import { WhatsAppMetadataSync } from './MetadataSync.js';
 
 const GROUP_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+interface MediaInfo {
+  type: 'image' | 'video' | 'audio' | 'document';
+  mimetype: string;
+  caption: string;
+}
+
+const MIME_TO_EXT: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+  'video/mp4': 'mp4',
+  'audio/ogg; codecs=opus': 'ogg',
+  'audio/mpeg': 'mp3',
+  'audio/mp4': 'm4a',
+  'application/pdf': 'pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+};
+
+function extractMediaInfo(msg: WAMessage): MediaInfo | null {
+  const m = msg.message;
+  if (!m) return null;
+
+  if (m.imageMessage) {
+    return { type: 'image', mimetype: m.imageMessage.mimetype || 'image/jpeg', caption: m.imageMessage.caption || '' };
+  }
+  if (m.videoMessage) {
+    return { type: 'video', mimetype: m.videoMessage.mimetype || 'video/mp4', caption: m.videoMessage.caption || '' };
+  }
+  if (m.audioMessage) {
+    return { type: 'audio', mimetype: m.audioMessage.mimetype || 'audio/ogg; codecs=opus', caption: '' };
+  }
+  if (m.documentMessage) {
+    return { type: 'document', mimetype: m.documentMessage.mimetype || 'application/octet-stream', caption: m.documentMessage.caption || '' };
+  }
+  return null;
+}
 
 export interface WhatsAppChannelOpts {
   onMessage: OnInboundMessage;
@@ -113,11 +156,11 @@ export class WhatsAppChannel implements Channel {
         // Only deliver full message for registered groups
         const groups = this.opts.registeredGroups();
         if (groups[chatJid]) {
-          const content =
+          const mediaInfo = extractMediaInfo(msg);
+
+          const content = mediaInfo?.caption ||
             msg.message?.conversation ||
             msg.message?.extendedTextMessage?.text ||
-            msg.message?.imageMessage?.caption ||
-            msg.message?.videoMessage?.caption ||
             '';
           const sender = msg.key.participant || msg.key.remoteJid || '';
           const senderName = msg.pushName || sender.split('@')[0];
@@ -131,6 +174,20 @@ export class WhatsAppChannel implements Channel {
             ? fromMe
             : content.startsWith(`${ASSISTANT_NAME}:`);
 
+          let media_type: 'image' | 'video' | 'audio' | 'document' | undefined;
+          let media_mimetype: string | undefined;
+          let media_path: string | undefined;
+
+          if (mediaInfo) {
+            const groupFolder = groups[chatJid].folder;
+            const saved = await this.downloadAndSaveMedia(msg, groupFolder, mediaInfo);
+            if (saved) {
+              media_type = mediaInfo.type;
+              media_mimetype = mediaInfo.mimetype;
+              media_path = saved;
+            }
+          }
+
           this.opts.onMessage(chatJid, {
             id: msg.key.id || '',
             chat_jid: chatJid,
@@ -140,6 +197,9 @@ export class WhatsAppChannel implements Channel {
             timestamp,
             is_from_me: fromMe,
             is_bot_message: isBotMessage,
+            media_type,
+            media_mimetype,
+            media_path,
           });
         }
       }
@@ -167,6 +227,40 @@ export class WhatsAppChannel implements Channel {
       // If send fails, queue it for retry on reconnect
       this.messageQueue.enqueue(jid, prefixed);
       logger.warn({ jid, err, queueSize: this.messageQueue.size }, 'Failed to send, message queued');
+    }
+  }
+
+  async sendMedia(jid: string, filePath: string, mediaType: string, caption?: string, mimetype?: string): Promise<void> {
+    if (!this.connected) {
+      logger.warn({ jid, filePath, mediaType }, 'WA disconnected, cannot send media');
+      return;
+    }
+
+    let content: AnyMessageContent;
+    switch (mediaType) {
+      case 'image':
+        content = { image: { url: filePath }, caption: caption || undefined };
+        break;
+      case 'video':
+        content = { video: { url: filePath }, caption: caption || undefined };
+        break;
+      case 'audio':
+        content = { audio: { url: filePath }, mimetype: mimetype || 'audio/mpeg', ptt: false };
+        break;
+      case 'document':
+        content = { document: { url: filePath }, mimetype: mimetype || 'application/octet-stream', fileName: path.basename(filePath), caption: caption || undefined };
+        break;
+      default:
+        logger.warn({ mediaType }, 'Unknown media type, sending as document');
+        content = { document: { url: filePath }, mimetype: mimetype || 'application/octet-stream', fileName: path.basename(filePath), caption: caption || undefined };
+    }
+
+    try {
+      await this.sock.sendMessage(jid, content);
+      logger.info({ jid, mediaType, filePath }, 'Media sent');
+    } catch (err) {
+      logger.error({ jid, mediaType, filePath, err }, 'Failed to send media');
+      throw err;
     }
   }
 
@@ -275,6 +369,25 @@ export class WhatsAppChannel implements Channel {
         this.reconnectWithBackoff();
       });
     }, delay);
+  }
+
+  private async downloadAndSaveMedia(msg: WAMessage, groupFolder: string, mediaInfo: MediaInfo): Promise<string | null> {
+    try {
+      const buffer = await downloadMediaMessage(msg, 'buffer', {});
+      const ext = MIME_TO_EXT[mediaInfo.mimetype] || mediaInfo.mimetype.split('/')[1] || 'bin';
+      const ts = Math.floor(Date.now() / 1000);
+      const rand = crypto.randomBytes(4).toString('hex');
+      const filename = `${mediaInfo.type}-${ts}-${rand}.${ext}`;
+      const mediaDir = path.join(GROUPS_DIR, groupFolder, 'Media');
+      fs.mkdirSync(mediaDir, { recursive: true });
+      const fullPath = path.join(mediaDir, filename);
+      fs.writeFileSync(fullPath, buffer as Buffer);
+      logger.info({ groupFolder, filename, size: (buffer as Buffer).length }, 'Media downloaded');
+      return `Media/${filename}`;
+    } catch (err) {
+      logger.error({ groupFolder, mediaType: mediaInfo.type, err }, 'Failed to download media');
+      return null;
+    }
   }
 
   private async translateJid(jid: string): Promise<string> {

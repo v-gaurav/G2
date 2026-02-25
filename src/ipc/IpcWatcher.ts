@@ -8,6 +8,7 @@ import {
   MAIN_GROUP_FOLDER,
 } from '../infrastructure/Config.js';
 import { AuthorizationPolicy } from '../groups/Authorization.js';
+import { GroupPaths } from '../groups/GroupPaths.js';
 import { IpcCommandDispatcher } from './IpcDispatcher.js';
 import {
   ScheduleTaskHandler,
@@ -33,6 +34,7 @@ import { RegisteredGroup } from '../types.js';
 
 export interface IpcDeps {
   sendMessage: (jid: string, text: string) => Promise<void>;
+  sendMedia?: (jid: string, filePath: string, mediaType: string, caption?: string, mimetype?: string) => Promise<void>;
   registeredGroups: () => Record<string, RegisteredGroup>;
   registerGroup: (jid: string, group: RegisteredGroup) => void;
   syncGroupMetadata: (force: boolean) => Promise<void>;
@@ -202,6 +204,36 @@ export class IpcWatcher {
               { chatJid: data.chatJid, sourceGroup },
               'Unauthorized IPC message attempt blocked',
             );
+          }
+        } else if (data.type === 'media' && data.chatJid && data.filePath && data.mediaType) {
+          if (!deps.sendMedia) {
+            logger.warn({ sourceGroup }, 'sendMedia not available, ignoring media IPC');
+          } else {
+            const targetGroup = registeredGroups[data.chatJid];
+            const auth = new AuthorizationPolicy({ sourceGroup, isMain });
+            if (auth.canSendMessage(targetGroup?.folder ?? '')) {
+              // Resolve relative path against the source group directory
+              const groupDir = GroupPaths.groupDir(sourceGroup);
+              const resolved = path.resolve(groupDir, data.filePath);
+              // Path traversal check: resolved path must stay within group dir
+              if (!resolved.startsWith(groupDir + path.sep) && resolved !== groupDir) {
+                logger.warn(
+                  { filePath: data.filePath, resolved, groupDir, sourceGroup },
+                  'Media path traversal attempt blocked',
+                );
+              } else {
+                await deps.sendMedia(data.chatJid, resolved, data.mediaType, data.caption, data.mimetype);
+                logger.info(
+                  { chatJid: data.chatJid, mediaType: data.mediaType, sourceGroup },
+                  'IPC media sent',
+                );
+              }
+            } else {
+              logger.warn(
+                { chatJid: data.chatJid, sourceGroup },
+                'Unauthorized IPC media attempt blocked',
+              );
+            }
           }
         }
         await fsp.unlink(filePath);

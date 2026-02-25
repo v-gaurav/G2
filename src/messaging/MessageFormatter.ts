@@ -15,9 +15,13 @@ export class MessageFormatter {
   }
 
   static formatMessages(messages: NewMessage[]): string {
-    const lines = messages.map((m) =>
-      `<message sender="${MessageFormatter.escapeXml(m.sender_name)}" time="${m.timestamp}">${MessageFormatter.escapeXml(m.content)}</message>`,
-    );
+    const lines = messages.map((m) => {
+      let attrs = `sender="${MessageFormatter.escapeXml(m.sender_name)}" time="${m.timestamp}"`;
+      if (m.media_type) attrs += ` media_type="${MessageFormatter.escapeXml(m.media_type)}"`;
+      if (m.media_path) attrs += ` media_path="${MessageFormatter.escapeXml(m.media_path)}"`;
+      if (m.media_mimetype) attrs += ` media_mimetype="${MessageFormatter.escapeXml(m.media_mimetype)}"`;
+      return `<message ${attrs}>${MessageFormatter.escapeXml(m.content)}</message>`;
+    });
     return `<messages>\n${lines.join('\n')}\n</messages>`;
   }
 

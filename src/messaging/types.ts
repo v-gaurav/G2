@@ -7,6 +7,9 @@ export interface NewMessage {
   timestamp: string;
   is_from_me?: boolean;
   is_bot_message?: boolean;
+  media_type?: 'image' | 'video' | 'audio' | 'document';
+  media_mimetype?: string;
+  media_path?: string;
 }
 
 // --- Channel abstraction ---
@@ -22,6 +25,8 @@ export interface Channel {
   setTyping?(jid: string, isTyping: boolean): Promise<void>;
   // Optional: metadata sync. Channels that discover chat names implement it.
   syncMetadata?(force?: boolean): Promise<void>;
+  // Optional: media sending. Channels that support media implement it.
+  sendMedia?(jid: string, filePath: string, mediaType: string, caption?: string, mimetype?: string): Promise<void>;
 }
 
 // Callback type that channels use to deliver inbound messages
