@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="https://github.com/v-gaurav/g2/tree/main/repo-tokens"><img src="https://raw.githubusercontent.com/v-gaurav/G2/main/repo-tokens/badge.svg" alt="repo tokens"></a>
-  <!-- token-count --><br><a href="https://github.com/v-gaurav/g2/tree/main/repo-tokens">25% of context window</a><!-- /token-count -->
+  <!-- token-count --><a href="https://github.com/v-gaurav/g2/tree/main/repo-tokens">51.6k tokens · 26% of context window</a><!-- /token-count -->
 </p>
 
 ---
