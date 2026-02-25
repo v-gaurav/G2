@@ -3,12 +3,12 @@
 </p>
 
 <p align="center">
-  Personal AI assistant that runs securely in containers. Inspired by <a href="https://github.com/qwibitai/nanoclaw">NanoClaw</a>, but totally reimagined for Enterpise Grade.
+  Totally reimagined Enterpise Grade Personal AI assistant. Inspired by <a href="https://github.com/qwibitai/nanoclaw">NanoClaw</a>.
 </p>
 
 <p align="center">
   <a href="https://github.com/v-gaurav/g2/tree/main/repo-tokens"><img src="https://raw.githubusercontent.com/v-gaurav/G2/main/repo-tokens/badge.svg" alt="repo tokens"></a>
-  <!-- token-count --><a href="https://github.com/v-gaurav/g2/tree/main/repo-tokens">55.1k tokens · 28% of context window</a><!-- /token-count -->
+  <!-- token-count --></p>br<a href="https://github.com/v-gaurav/g2/tree/main/repo-tokens">28% of context window</a><!-- /token-count -->
 </p>
 
 ---
