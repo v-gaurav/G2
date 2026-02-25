@@ -158,6 +158,16 @@ export class DefaultMountFactory implements IMountFactory {
       });
     }
 
+    // Gmail credentials directory (for Gmail MCP inside container)
+    const gmailDir = path.join(getHomeDir(), '.gmail-mcp');
+    if (fs.existsSync(gmailDir)) {
+      mounts.push({
+        hostPath: gmailDir,
+        containerPath: '/home/node/.gmail-mcp',
+        readonly: false, // MCP may need to refresh tokens
+      });
+    }
+
     // Additional mounts validated against external allowlist
     if (group.containerConfig?.additionalMounts) {
       const validatedMounts = validateAdditionalMounts(

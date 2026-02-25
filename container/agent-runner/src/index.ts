@@ -440,7 +440,8 @@ async function runQuery(
         'TeamCreate', 'TeamDelete', 'SendMessage',
         'TodoWrite', 'ToolSearch', 'Skill',
         'NotebookEdit',
-        'mcp__g2__*'
+        'mcp__g2__*',
+        'mcp__gmail__*'
       ],
       env: sdkEnv,
       permissionMode: 'bypassPermissions',
@@ -456,6 +457,12 @@ async function runQuery(
             G2_IS_MAIN: containerInput.isMain ? '1' : '0',
           },
         },
+        ...(fs.existsSync('/home/node/.gmail-mcp/credentials.json') ? {
+          gmail: {
+            command: 'npx',
+            args: ['-y', '@gongrzhe/server-gmail-autoauth-mcp'],
+          },
+        } : {}),
       },
       hooks: {
         PreCompact: [{ hooks: [createPreCompactHook()] }],
