@@ -84,9 +84,9 @@ Run `./.claude/skills/setup/scripts/03-setup-container.sh --runtime <chosen>` an
 
 ## 4. Claude Authentication (No Script)
 
-If HAS_ENV=true from step 1, read `.env` and check if it already has `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`, or `CLAUDE_CODE_USE_BEDROCK`. If so, confirm with user: "You already have Claude credentials configured. Want to keep them or reconfigure?" If keeping, skip to step 5.
+If HAS_ENV=true from step 1, read `.env` and check if it already has `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`, `CLAUDE_CODE_USE_BEDROCK`, or `ANTHROPIC_BASE_URL`. If so, confirm with user: "You already have Claude credentials configured. Want to keep them or reconfigure?" If keeping, skip to step 5.
 
-AskUserQuestion: Claude subscription (Pro/Max) vs Anthropic API key vs AWS Bedrock?
+AskUserQuestion: Claude subscription (Pro/Max) vs Anthropic API key vs AWS Bedrock vs LiteLLM proxy?
 
 **Subscription:** Tell the user:
 1. Open another terminal and run: `claude setup-token`
@@ -99,6 +99,22 @@ Do NOT ask the user to paste the token into the chat. Do NOT use AskUserQuestion
 **API key:** Tell the user to add `ANTHROPIC_API_KEY=<key>` to the `.env` file in the project root, then let you know when done. Once confirmed, verify the `.env` file has the key.
 
 **AWS Bedrock:** Add `CLAUDE_CODE_USE_BEDROCK=1` and `AWS_REGION=<region>` to the `.env` file. AWS credentials are passed through from the host environment (via `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`). Verify AWS credentials work by running `aws sts get-caller-identity`. The container runner automatically forwards these environment variables into agent containers.
+
+**LiteLLM proxy:** Ask the user for their LiteLLM proxy URL (e.g. `https://litellm.example.com`). Then ask for model names — offer sensible defaults:
+- Primary model (default: `claude-opus`)
+- Haiku/fast model (default: `claude-sonnet`)
+- Small/fast model (default: `claude-haiku`)
+
+Add the following to the `.env` file:
+```
+ANTHROPIC_BASE_URL=<proxy-url>
+ANTHROPIC_API_KEY=<key>
+ANTHROPIC_MODEL=<primary-model>
+ANTHROPIC_DEFAULT_HAIKU_MODEL=<haiku-model>
+ANTHROPIC_SMALL_FAST_MODEL=<small-fast-model>
+```
+
+If the LiteLLM proxy requires a real API key, tell the user to add `ANTHROPIC_API_KEY=<key>` to the `.env` file and let you know when done. If the proxy doesn't require authentication (or uses a dummy key), set `ANTHROPIC_API_KEY=lm-studio` in `.env`. **NEVER read, display, or log API key values.** The container runner automatically forwards `ANTHROPIC_BASE_URL` into agent containers.
 
 ## 5. WhatsApp Authentication
 
