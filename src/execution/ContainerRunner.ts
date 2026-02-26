@@ -371,6 +371,10 @@ export class ContainerRunner {
     return readEnvFile([
       'CLAUDE_CODE_OAUTH_TOKEN',
       'ANTHROPIC_API_KEY',
+      'ANTHROPIC_BASE_URL',
+      'ANTHROPIC_MODEL',
+      'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+      'ANTHROPIC_SMALL_FAST_MODEL',
       'CLAUDE_CODE_USE_BEDROCK',
       'AWS_REGION',
       'AWS_ACCESS_KEY_ID',
