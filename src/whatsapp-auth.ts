@@ -61,6 +61,8 @@ async function connectSocket(phoneNumber?: string, isReconnect = false): Promise
     printQRInTerminal: false,
     logger,
     browser: Browsers.macOS('Chrome'),
+    syncFullHistory: false,
+    markOnlineOnConnect: false,
   });
 
   if (usePairingCode && phoneNumber && !state.creds.me) {
@@ -108,9 +110,9 @@ async function connectSocket(phoneNumber?: string, isReconnect = false): Promise
         process.exit(1);
       } else if (reason === 515) {
         // 515 = stream error, often happens after pairing succeeds but before
-        // registration completes. Reconnect to finish the handshake.
-        console.log('\n⟳ Stream error (515) after pairing — reconnecting...');
-        connectSocket(phoneNumber, true);
+        // registration completes. Wait a few seconds then reconnect to finish the handshake.
+        console.log('\n⟳ Stream error (515) after pairing — waiting 5s then reconnecting...');
+        setTimeout(() => connectSocket(phoneNumber, true), 5000);
       } else {
         fs.writeFileSync(STATUS_FILE, `failed:${reason || 'unknown'}`);
         console.log('\n✗ Connection failed. Please try again.');
@@ -119,15 +121,32 @@ async function connectSocket(phoneNumber?: string, isReconnect = false): Promise
     }
 
     if (connection === 'open') {
-      fs.writeFileSync(STATUS_FILE, 'authenticated');
       // Clean up QR file now that we're connected
       try { fs.unlinkSync(QR_FILE); } catch {}
-      console.log('\n✓ Successfully authenticated with WhatsApp!');
-      console.log('  Credentials saved to store/auth/');
-      console.log('  You can now start the G2 service.\n');
 
-      // Give it a moment to save credentials, then exit
-      setTimeout(() => process.exit(0), 1000);
+      // Signal connected immediately so browser page can update
+      fs.writeFileSync(STATUS_FILE, 'connected');
+      console.log('\n✓ Connected to WhatsApp, waiting for registration to complete...');
+
+      // Wait for registered: true before declaring success (up to 30s)
+      let waited = 0;
+      const regCheck = setInterval(() => {
+        waited += 500;
+        if (state.creds.registered) {
+          clearInterval(regCheck);
+          fs.writeFileSync(STATUS_FILE, 'authenticated');
+          console.log('✓ Successfully authenticated with WhatsApp!');
+          console.log('  Credentials saved to store/auth/');
+          console.log('  You can now start the G2 service.\n');
+          setTimeout(() => process.exit(0), 1000);
+        } else if (waited >= 30000) {
+          clearInterval(regCheck);
+          // Still write authenticated — connection is open even if registered flag is slow
+          fs.writeFileSync(STATUS_FILE, 'authenticated');
+          console.log('✓ Connected (registration flag pending, but credentials saved).');
+          setTimeout(() => process.exit(0), 1000);
+        }
+      }, 500);
     }
   });
 

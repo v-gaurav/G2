@@ -15,6 +15,29 @@
 # ---------------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 ENV_FILE="${G2_ENV_FILE:-${SCRIPT_DIR}/.env}"
+BASHRC_FILE="$HOME/.bashrc"
+BASHRC_MARKER_START="# >>> G2 Claude Provider (managed by switch-claude-provider.sh) >>>"
+BASHRC_MARKER_END="# <<< G2 Claude Provider <<<"
+
+# All provider-related keys that get synced to ~/.bashrc
+PROVIDER_KEYS=(
+    CLAUDE_CODE_USE_BEDROCK
+    CLAUDE_CODE_USE_VERTEX
+    ANTHROPIC_BEDROCK_BASE_URL
+    AWS_ACCESS_KEY_ID
+    AWS_SECRET_ACCESS_KEY
+    AWS_SESSION_TOKEN
+    AWS_PROFILE
+    AWS_REGION
+    AWS_DEFAULT_REGION
+    CLOUD_ML_PROJECT_ID
+    CLOUD_ML_REGION
+    ANTHROPIC_API_KEY
+    ANTHROPIC_BASE_URL
+    ANTHROPIC_MODEL
+    ANTHROPIC_DEFAULT_HAIKU_MODEL
+    ANTHROPIC_SMALL_FAST_MODEL
+)
 
 # ---------------------------------------------------------------
 # .env helpers
@@ -45,6 +68,47 @@ env_remove() {
     if [[ -f "${ENV_FILE}" ]]; then
         local tmp="${ENV_FILE}.tmp.$$"
         grep -vE "^${key}=" "${ENV_FILE}" > "${tmp}" && mv "${tmp}" "${ENV_FILE}"
+    fi
+}
+
+# ---------------------------------------------------------------
+# ~/.bashrc helpers (managed block)
+# ---------------------------------------------------------------
+remove_bashrc_block() {
+    if [[ -f "${BASHRC_FILE}" ]]; then
+        local tmp="${BASHRC_FILE}.tmp.$$"
+        awk -v start="${BASHRC_MARKER_START}" -v end="${BASHRC_MARKER_END}" \
+            '$0 == start { skip=1; next } $0 == end { skip=0; next } !skip' \
+            "${BASHRC_FILE}" > "${tmp}" && mv "${tmp}" "${BASHRC_FILE}"
+        # Remove trailing blank lines left behind
+        sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' "${BASHRC_FILE}" 2>/dev/null || true
+    fi
+}
+
+sync_bashrc() {
+    # Remove old block, then write a fresh one with current .env values
+    remove_bashrc_block
+
+    local block=""
+    for key in "${PROVIDER_KEYS[@]}"; do
+        local val
+        val=$(env_get "${key}")
+        if [[ -n "${val}" ]]; then
+            block+="export ${key}=\"${val}\""$'\n'
+        fi
+    done
+
+    # Only write the block if there are values to export
+    if [[ -n "${block}" ]]; then
+        {
+            echo ""
+            echo "${BASHRC_MARKER_START}"
+            printf '%s' "${block}"
+            echo "${BASHRC_MARKER_END}"
+        } >> "${BASHRC_FILE}"
+        echo "  ~/.bashrc updated (provider exports synced)."
+    else
+        echo "  ~/.bashrc cleaned (provider exports removed)."
     fi
 }
 
@@ -304,7 +368,8 @@ case "${choice}" in
     *) echo "Invalid choice. No changes made." ;;
 esac
 
-# Show final state
+# Sync to ~/.bashrc and show final state
 if [[ "${choice}" =~ ^[1-5]$ ]]; then
+    sync_bashrc
     print_current_config
 fi

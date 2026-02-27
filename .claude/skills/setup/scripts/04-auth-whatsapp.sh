@@ -162,24 +162,31 @@ case "$METHOD" in
       });
     " >> "$LOG_FILE" 2>&1
 
-    # Open in browser (macOS)
-    if command -v open >/dev/null 2>&1; then
+    # Open in browser
+    if command -v xdg-open >/dev/null 2>&1; then
+      xdg-open "$PROJECT_ROOT/store/qr-auth.html" >/dev/null 2>&1 &
+      log "Opened QR auth page in browser (xdg-open)"
+    elif command -v open >/dev/null 2>&1; then
       open "$PROJECT_ROOT/store/qr-auth.html"
-      log "Opened QR auth page in browser"
+      log "Opened QR auth page in browser (open)"
     else
-      log "WARNING: 'open' command not found, cannot open browser"
+      log "WARNING: no browser opener found, cannot open browser"
     fi
 
     # Poll for completion (120s, 2s intervals)
     log "Polling for auth completion (120s timeout)"
+    WROTE_SUCCESS_PAGE="false"
     for i in $(seq 1 60); do
       if [ -f "$PROJECT_ROOT/store/auth-status.txt" ]; then
         STATUS_CONTENT=$(cat "$PROJECT_ROOT/store/auth-status.txt" 2>/dev/null || echo "")
         case "$STATUS_CONTENT" in
-          authenticated|already_authenticated)
-            log "Authentication successful: $STATUS_CONTENT"
-            # Replace QR page with success page so browser auto-refresh shows it
-            cat > "$PROJECT_ROOT/store/qr-auth.html" <<'SUCCESSEOF'
+          connected)
+            # WebSocket connected, phone confirmed — show success page immediately
+            # but keep polling until fully authenticated
+            if [ "$WROTE_SUCCESS_PAGE" = "false" ]; then
+              log "WhatsApp connected, updating browser page"
+              WROTE_SUCCESS_PAGE="true"
+              cat > "$PROJECT_ROOT/store/qr-auth.html" <<'SUCCESSEOF'
 <!DOCTYPE html>
 <html><head><title>G2 - Connected!</title>
 <style>
@@ -197,6 +204,31 @@ case "$METHOD" in
 <script>localStorage.removeItem('g2_qr_start');</script>
 </body></html>
 SUCCESSEOF
+            fi
+            ;;
+          authenticated|already_authenticated)
+            log "Authentication successful: $STATUS_CONTENT"
+            # Write success page if we haven't already (e.g. fast registration)
+            if [ "$WROTE_SUCCESS_PAGE" = "false" ]; then
+              cat > "$PROJECT_ROOT/store/qr-auth.html" <<'SUCCESSEOF'
+<!DOCTYPE html>
+<html><head><title>G2 - Connected!</title>
+<style>
+  body { font-family: -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #f5f5f5; }
+  .card { background: white; border-radius: 16px; padding: 40px; box-shadow: 0 4px 24px rgba(0,0,0,0.1); text-align: center; max-width: 400px; }
+  h2 { color: #27ae60; margin: 0 0 8px; }
+  p { color: #666; }
+  .check { font-size: 64px; margin-bottom: 16px; }
+</style></head><body>
+<div class="card">
+  <div class="check">&#10003;</div>
+  <h2>Connected to WhatsApp</h2>
+  <p>You can close this tab.</p>
+</div>
+<script>localStorage.removeItem('g2_qr_start');</script>
+</body></html>
+SUCCESSEOF
+            fi
             emit_status "$STATUS_CONTENT" "success"
             exit 0
             ;;
@@ -224,6 +256,14 @@ SUCCESSEOF
       fi
       sleep 2
     done
+
+    # If we saw 'connected' but never got 'authenticated', treat as success
+    # (registration flag can be slow but connection is established)
+    if [ "$WROTE_SUCCESS_PAGE" = "true" ]; then
+      log "Timeout waiting for full registration, but connection was established — treating as success"
+      emit_status "authenticated" "success"
+      exit 0
+    fi
 
     log "Timeout waiting for auth completion"
     emit_status "failed" "failed" "timeout"
